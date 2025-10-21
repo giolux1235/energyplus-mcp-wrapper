@@ -28,12 +28,12 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Download and install EnergyPlus
-RUN wget -O energyplus.tar.gz "https://github.com/NREL/EnergyPlus/releases/download/v24.2.0/EnergyPlus-24.2.0-48c1128f03-Linux-Ubuntu22.04-x86_64.tar.gz" \
-    && tar -xzf energyplus.tar.gz \
-    && mv EnergyPlus-24.2.0-48c1128f03-Linux-Ubuntu22.04-x86_64 /usr/local/energyplus \
+RUN wget -O energyplus.run "https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run" \
+    && chmod +x energyplus.run \
+    && ./energyplus.run --mode unattended --install-dir /usr/local/energyplus \
+    && rm energyplus.run \
     && ln -s /usr/local/energyplus/energyplus /usr/local/bin/energyplus \
-    && ln -s /usr/local/energyplus/Energy+.idd /usr/local/bin/Energy+.idd \
-    && rm energyplus.tar.gz
+    && ln -s /usr/local/energyplus/Energy+.idd /usr/local/bin/Energy+.idd
 
 # Copy requirements first for better caching
 COPY requirements.txt .
