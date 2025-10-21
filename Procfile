@@ -1,1 +1,1 @@
-web: python minimal-wrapper.py
+web: python ultra-simple.py
