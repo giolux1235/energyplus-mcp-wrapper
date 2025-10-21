@@ -7,3 +7,4 @@ fastmcp==0.1.0
 networkx==3.1
 graphviz==0.20.1
 mcp[cli]==1.0.0
+energyplus-wrapper
