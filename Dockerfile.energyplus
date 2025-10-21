@@ -1,0 +1,41 @@
+# Use Python 3.10 slim as base (proven to work with EnergyPlus)
+FROM python:3.10-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y wget unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install EnergyPlus using the proven tar.gz method
+RUN wget https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-64bit-linux.tar.gz && \
+    tar -xvzf EnergyPlus-25.1.0-64bit-linux.tar.gz && \
+    rm EnergyPlus-25.1.0-64bit-linux.tar.gz && \
+    mv EnergyPlus-25.1.0 /usr/local/EnergyPlus
+
+# Set environment variables for EnergyPlus
+ENV PATH="/usr/local/EnergyPlus:$PATH"
+ENV ENERGYPLUS_DIR="/usr/local/EnergyPlus"
+ENV ENERGYPLUS_EXE="/usr/local/EnergyPlus/energyplus"
+ENV ENERGYPLUS_IDD="/usr/local/EnergyPlus/Energy+.idd"
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p logs outputs sample_files
+
+# Set environment variables
+ENV WORKSPACE_ROOT=/app/EnergyPlus-MCP/energyplus-mcp-server
+ENV PORT=8080
+
+EXPOSE 8080
+
+# Use the full HTTP wrapper with EnergyPlus
+CMD ["python", "simple-http-wrapper.py"]
