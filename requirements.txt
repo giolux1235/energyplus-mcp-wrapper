@@ -1,9 +1,9 @@
 flask==2.2.2
-energyplus-mcp-server
-eppy
-matplotlib
-networkx
-pandas
-plotly
-graphviz
-mcp[cli]
+eppy==0.5.60
+pandas==2.0.3
+matplotlib==3.7.2
+plotly==5.15.0
+fastmcp==0.1.0
+networkx==3.1
+graphviz==0.20.1
+mcp[cli]==1.0.0

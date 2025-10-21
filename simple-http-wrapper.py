@@ -69,12 +69,12 @@ class PatchedConfig:
             'output_dir': '{mcp_server_dir}/outputs',
             'temp_dir': '/tmp'
         }})()
-        self.energyplus = type('EnergyPlus', (), {{
-            'version': '24.2.0',
-            'executable_path': '/usr/local/bin/energyplus',
-            'idd_path': '/usr/local/bin/Energy+.idd',
-            'example_files_path': '{mcp_server_dir}/sample_files'
-        }})()
+                 self.energyplus = type('EnergyPlus', (), {{
+                     'version': '24.2.0',
+                     'executable_path': os.environ.get('ENERGYPLUS_EXE', '/usr/local/bin/energyplus'),
+                     'idd_path': os.environ.get('ENERGYPLUS_IDD', '/usr/local/bin/Energy+.idd'),
+                     'example_files_path': '{mcp_server_dir}/sample_files'
+                 }})()
         self.server = type('Server', (), {{
             'name': 'energyplus-mcp-server',
             'version': '0.1.0',

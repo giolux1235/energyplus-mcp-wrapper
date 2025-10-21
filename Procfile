@@ -1,1 +1,1 @@
-web: python simple-http-wrapper-test.py
+web: python simple-http-wrapper.py
