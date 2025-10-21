@@ -18,6 +18,11 @@ def status():
         "mcp_server_available": mcp_server_dir.exists()
     })
 
+@app.route('/health', methods=['GET'])
+def health():
+    """Simple health check for Railway"""
+    return "OK", 200
+
 @app.route('/tools', methods=['GET'])
 def list_tools():
     """List available MCP tools"""
