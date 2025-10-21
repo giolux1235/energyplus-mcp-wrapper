@@ -1,0 +1,9 @@
+flask==2.2.2
+energyplus-mcp-server
+eppy
+matplotlib
+networkx
+pandas
+plotly
+graphviz
+mcp[cli]
