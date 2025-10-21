@@ -243,7 +243,15 @@ def index():
     })
 
 if __name__ == '__main__':
+    # Get port from environment variable (for cloud deployment)
+    port = int(os.environ.get('PORT', 8080))
+    
     print(f"Starting EnergyPlus MCP HTTP Wrapper")
     print(f"MCP Server Path: {mcp_server_dir}")
     print(f"Server available: {os.path.exists(mcp_server_dir)}")
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    print(f"Server URL: http://0.0.0.0:{port}")
+    
+    # Print the MCP server URL for other services to use
+    print(f"MCP_SERVER_URL=http://0.0.0.0:{port}")
+    
+    app.run(host='0.0.0.0', port=port, debug=False)

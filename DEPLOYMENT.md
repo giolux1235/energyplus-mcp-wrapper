@@ -75,6 +75,63 @@ docker run -p 8080:8080 energyplus-mcp
 - Google Cloud Run
 - Azure Container Instances
 
+## 🔗 Using as a Backend Service
+
+This MCP server is designed to be used as a **backend service** for other projects. After deployment, you'll get a public URL that you can use in your other applications.
+
+### Getting the MCP Server URL
+
+After deployment, run:
+```bash
+./get-mcp-url.sh
+```
+
+This will output the `MCP_SERVER_URL` that you can use in your other projects.
+
+### Using in Your Other Project
+
+**Node.js/JavaScript:**
+```javascript
+const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'https://your-app-name.railway.app';
+
+// Call EnergyPlus tools
+async function callEnergyPlusTool(tool, args = {}) {
+  const response = await fetch(`${MCP_SERVER_URL}/rpc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tool, arguments: args })
+  });
+  return response.json();
+}
+
+// Example usage
+const result = await callEnergyPlusTool('load_idf_model', { 
+  idf_path: 'sample_files/1ZoneUncontrolled.idf' 
+});
+```
+
+**Python:**
+```python
+import os
+import requests
+
+MCP_SERVER_URL = os.getenv('MCP_SERVER_URL', 'https://your-app-name.railway.app')
+
+def call_energyplus_tool(tool, args=None):
+    response = requests.post(f"{MCP_SERVER_URL}/rpc", 
+                           json={"tool": tool, "arguments": args or {}})
+    return response.json()
+
+# Example usage
+result = call_energyplus_tool('get_server_status')
+```
+
+**Environment Variables:**
+```bash
+# Add to your other project's .env
+MCP_SERVER_URL=https://your-app-name.railway.app
+```
+
 ## 📱 Building a Web App
 
 Once deployed, you can build a web app that uses the API:
