@@ -6,14 +6,14 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && \
-    apt-get install -y wget unzip && \
+    apt-get install -y wget unzip libgomp1 libx11-6 && \
     rm -rf /var/lib/apt/lists/*
 
-# Install EnergyPlus using the proven tar.gz method
-RUN wget https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-64bit-linux.tar.gz && \
-    tar -xvzf EnergyPlus-25.1.0-64bit-linux.tar.gz && \
-    rm EnergyPlus-25.1.0-64bit-linux.tar.gz && \
-    mv EnergyPlus-25.1.0 /usr/local/EnergyPlus
+# Download and install EnergyPlus in unattended mode
+RUN wget https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run && \
+    chmod +x EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run && \
+    ./EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run --mode unattended --install-dir /usr/local/EnergyPlus && \
+    rm EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run
 
 # Set environment variables for EnergyPlus
 ENV PATH="/usr/local/EnergyPlus:$PATH"
