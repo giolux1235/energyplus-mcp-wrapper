@@ -7,31 +7,22 @@ RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
     gfortran \
-    libgl1-mesa-glx \
-    libglu1-mesa \
-    libxrender1 \
-    libxext6 \
-    libxft2 \
-    libxinerama1 \
-    libxcursor1 \
-    libxi6 \
-    libxrandr2 \
-    libxss1 \
-    libgconf-2-4 \
-    libxtst6 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxss1 \
-    libasound2 \
-    libnss3 \
-    libxrandr2 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxss1 \
-    libasound2 \
-    libnss3 \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libxrender-dev \
+    libxext-dev \
+    libxft-dev \
+    libxinerama-dev \
+    libxcursor-dev \
+    libxi-dev \
+    libxrandr-dev \
+    libxss-dev \
+    libxtst-dev \
+    libxcomposite-dev \
+    libxdamage-dev \
+    libxfixes-dev \
+    libasound2-dev \
+    libnss3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
