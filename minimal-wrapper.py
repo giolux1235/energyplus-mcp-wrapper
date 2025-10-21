@@ -15,6 +15,10 @@ def home():
 def health():
     return "OK", 200
 
+@app.route('/healthz')
+def healthz():
+    return "OK", 200
+
 @app.route('/status')
 def status():
     return jsonify({"status": "healthy"})
@@ -37,4 +41,9 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print(f"Starting server on port {port}")
     print(f"MCP_SERVER_URL=http://0.0.0.0:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print(f"Server starting...")
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    except Exception as e:
+        print(f"Error starting server: {e}")
+        raise

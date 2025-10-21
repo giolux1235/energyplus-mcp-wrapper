@@ -2,16 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install only Flask
-RUN pip install flask
-
-# Copy the minimal wrapper
-COPY minimal-wrapper.py .
+# Copy the simple server (no dependencies needed)
+COPY simple-server.py .
 
 # Set environment
 ENV PORT=8080
 
 EXPOSE 8080
 
-# Run the minimal wrapper
-CMD ["python", "minimal-wrapper.py"]
+# Run the simple server
+CMD ["python", "simple-server.py"]
