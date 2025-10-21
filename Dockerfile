@@ -2,13 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy the ultra-simple server
-COPY ultra-simple.py .
+# Copy the enhanced server
+COPY enhanced-server.py .
 
 # Set environment
 ENV PORT=8080
 
 EXPOSE 8080
 
-# Run the ultra-simple server
-CMD ["python", "ultra-simple.py"]
+# Run the enhanced server
+CMD ["python", "enhanced-server.py"]

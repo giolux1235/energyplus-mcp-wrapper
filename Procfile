@@ -1,1 +1,1 @@
-web: python simple-http-wrapper.py
+web: python ultra-simple.py
