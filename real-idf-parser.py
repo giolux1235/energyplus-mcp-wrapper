@@ -299,26 +299,40 @@ class EnergySimulator:
         cooling_energy = cooling_load * cooling_days * 24 * area  # kWh/year
         
         # Calculate lighting and equipment annual energy consumption
-        # Assuming 8,760 hours per year (24/7 operation for lighting/equipment)
-        operating_hours = 8760  # hours per year
+        # Use realistic operating hours based on building type
+        if building_type == "residential":
+            operating_hours = 2920  # 8 hours/day average
+        elif building_type == "office":
+            operating_hours = 2920  # 8 hours/day, 5 days/week
+        elif building_type == "retail":
+            operating_hours = 4380  # 12 hours/day
+        elif building_type == "warehouse":
+            operating_hours = 5840  # 16 hours/day
+        elif building_type == "school":
+            operating_hours = 1752  # 4.8 hours/day (school hours)
+        elif building_type == "hospital":
+            operating_hours = 8760  # 24/7 operation
+        else:
+            operating_hours = 2920  # Default 8 hours/day
         
+        # Calculate lighting and equipment energy (more realistic)
         lighting_energy = (lighting * area * operating_hours) / 1000  # Convert W to kW
         equipment_energy = (equipment * area * operating_hours) / 1000  # Convert W to kW
         
         # Total energy consumption (heating + cooling + lighting + equipment)
         total_energy = heating_energy + cooling_energy + lighting_energy + equipment_energy
         
-        # Apply building type multipliers to total energy
+        # Apply realistic building type multipliers based on actual energy use patterns
         if building_type == "residential":
-            total_energy *= 0.4  # Residential uses much less energy
+            total_energy *= 0.3  # Residential is most efficient
         elif building_type == "retail":
-            total_energy *= 1.3  # Retail uses more energy
+            total_energy *= 1.2  # Retail uses more energy due to extended hours
         elif building_type == "warehouse":
-            total_energy *= 0.2  # Warehouse uses minimal energy
+            total_energy *= 0.4  # Warehouse uses moderate energy
         elif building_type == "school":
-            total_energy *= 0.8  # Schools use moderate energy
+            total_energy *= 0.6  # Schools use moderate energy
         elif building_type == "hospital":
-            total_energy *= 1.5  # Hospitals use more energy
+            total_energy *= 1.8  # Hospitals use much more energy (24/7 operation)
         
         return {
             "building_type": building_type,
