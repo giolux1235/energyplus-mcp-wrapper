@@ -531,6 +531,7 @@ def main():
     print("EnergyPlus simulation capabilities: ACTIVE")
     print("IDF file parsing: ACTIVE")
     print("File upload support: ACTIVE")
+    print("Version: 2.0.0 - Fixed file upload processing")
     
     try:
         while True:
