@@ -298,10 +298,17 @@ class EnergySimulator:
         cooling_load = heating_load + internal_gains
         cooling_energy = cooling_load * cooling_days * 24 * area  # kWh/year
         
-        # Total energy consumption
-        total_energy = heating_energy + cooling_energy
+        # Calculate lighting and equipment annual energy consumption
+        # Assuming 8,760 hours per year (24/7 operation for lighting/equipment)
+        operating_hours = 8760  # hours per year
         
-        # Apply building type multipliers
+        lighting_energy = (lighting * area * operating_hours) / 1000  # Convert W to kW
+        equipment_energy = (equipment * area * operating_hours) / 1000  # Convert W to kW
+        
+        # Total energy consumption (heating + cooling + lighting + equipment)
+        total_energy = heating_energy + cooling_energy + lighting_energy + equipment_energy
+        
+        # Apply building type multipliers to total energy
         if building_type == "residential":
             total_energy *= 0.4  # Residential uses much less energy
         elif building_type == "retail":
@@ -318,6 +325,8 @@ class EnergySimulator:
             "total_energy_consumption": round(total_energy, 2),
             "heating_energy": round(heating_energy, 2),
             "cooling_energy": round(cooling_energy, 2),
+            "lighting_energy": round(lighting_energy, 2),
+            "equipment_energy": round(equipment_energy, 2),
             "energy_intensity": round(total_energy / area, 2),
             "building_area": area,
             "lighting_power": lighting,
