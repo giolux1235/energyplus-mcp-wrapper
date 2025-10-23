@@ -529,13 +529,20 @@ class EnhancedEnergySimulator:
             "hvac_details": building_data.get("hvac_details", []),
             "refrigeration_details": building_data.get("refrigeration_details", []),
             "parsing_details": building_data.get("parsing_details", {}),
-            # ENHANCED METRICS
+            # ENHANCED METRICS - Interface expects camelCase
             "peak_demand": round(peak_demand, 2),
             "performance_rating": performance_rating,
             "performance_score": performance_score,
             "lighting_efficiency": round(lighting_efficiency, 1),
             "equipment_efficiency": round(equipment_efficiency, 1),
             "refrigeration_efficiency": round(refrigeration_efficiency, 1),
+            # Interface field names (camelCase)
+            "peakDemand": round(peak_demand, 2),
+            "performanceRating": performance_rating,
+            "performanceScore": performance_score,
+            "lightingEfficiency": round(lighting_efficiency, 1),
+            "equipmentEfficiency": round(equipment_efficiency, 1),
+            "refrigerationEfficiency": round(refrigeration_efficiency, 1),
             "enhanced_metrics": {
                 "peak_demand_kw": round(peak_demand, 2),
                 "performance_rating": performance_rating,
