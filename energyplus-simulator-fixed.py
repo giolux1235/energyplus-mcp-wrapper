@@ -421,55 +421,77 @@ def handle_request(conn, addr):
         elif path == '/simulate' and method == 'POST':
             # Handle POST request with file upload
             try:
-                # Check if it's multipart form data
-                if 'multipart/form-data' in request:
-                    # Extract boundary
-                    boundary_match = re.search(r'boundary=([^;]+)', request)
-                    if boundary_match:
-                        boundary = boundary_match.group(1)
-                        # Find the start of the body
-                        body_start = request.find('\r\n\r\n')
-                        if body_start != -1:
-                            body = request[body_start + 4:]
-                            files = parse_multipart_data(body, boundary)
+                print(f"Processing POST to /simulate")
+                
+                # Find the start of the body
+                body_start = request.find('\r\n\r\n')
+                if body_start == -1:
+                    response = 'HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error": "No body found"}'
+                else:
+                    body = request[body_start + 4:]
+                    print(f"Body length: {len(body)}")
+                    
+                    # Check if it's multipart form data
+                    if 'multipart/form-data' in request:
+                        print("Processing multipart data")
+                        # Extract boundary
+                        boundary_match = re.search(r'boundary=([^;]+)', request)
+                        if boundary_match:
+                            boundary = boundary_match.group(1)
+                            print(f"Boundary: {boundary}")
                             
-                            # Look for IDF files
+                            # Simple multipart parsing
+                            parts = body.split(f'--{boundary}')
                             idf_content = None
-                            for filename, content in files.items():
-                                if filename.lower().endswith('.idf'):
-                                    idf_content = content
-                                    break
+                            
+                            for part in parts:
+                                if 'Content-Disposition: form-data' in part and 'filename=' in part:
+                                    print(f"Found file part: {part[:200]}...")
+                                    # Extract filename
+                                    filename_match = re.search(r'filename="([^"]+)"', part)
+                                    if filename_match:
+                                        filename = filename_match.group(1)
+                                        print(f"Filename: {filename}")
+                                        
+                                        if filename.lower().endswith('.idf'):
+                                            # Extract content
+                                            content_start = part.find('\r\n\r\n')
+                                            if content_start != -1:
+                                                idf_content = part[content_start + 4:]
+                                                print(f"IDF content length: {len(idf_content)}")
+                                                break
                             
                             if idf_content:
-                                # Run simulation with IDF content
+                                print("Running simulation with IDF content")
                                 simulation_result = simulator.simulate_from_idf(idf_content)
                             else:
-                                # No IDF file, use default simulation
+                                print("No IDF file found, using default")
                                 simulation_result = simulator.calculate_energy_consumption("office", None)
                                 simulation_result["warning"] = "No IDF file provided, using default building"
                             
                             response = f'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{json.dumps(simulation_result)}'
                         else:
-                            response = 'HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error": "Invalid multipart data"}'
+                            response = 'HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error": "No boundary found"}'
                     else:
-                        response = 'HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error": "No boundary found"}'
-                else:
-                    # Try to parse JSON body
-                    body_start = request.find('\r\n\r\n')
-                    if body_start != -1:
-                        body = request[body_start + 4:]
+                        # Try to parse JSON body
+                        print("Processing JSON data")
                         try:
                             data = json.loads(body)
+                            print(f"JSON data keys: {list(data.keys())}")
+                            
                             if 'idf_content' in data:
+                                print("Found idf_content in JSON")
                                 simulation_result = simulator.simulate_from_idf(data['idf_content'])
                             else:
+                                print("No idf_content found, using default")
                                 simulation_result = simulator.calculate_energy_consumption("office", None)
+                            
                             response = f'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{json.dumps(simulation_result)}'
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
+                            print(f"JSON decode error: {e}")
                             response = 'HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error": "Invalid JSON"}'
-                    else:
-                        response = 'HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\n\r\n{"error": "No body found"}'
             except Exception as e:
+                print(f"Error in POST processing: {e}")
                 response = f'HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n{{"error": "Simulation error: {str(e)}"}}'
         elif path == '/rpc' and method == 'POST':
             # Handle MCP tool calls
