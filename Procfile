@@ -1,1 +1,1 @@
-web: python advanced-parser.py
+web: python fixed-parser.py

@@ -20,4 +20,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Run the EnergyPlus simulator with full capabilities
-CMD ["python", "advanced-parser.py"]
+CMD ["python", "fixed-parser.py"]
