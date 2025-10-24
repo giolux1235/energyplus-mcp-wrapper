@@ -1,1 +1,1 @@
-web: python railway-healthy.py
+web: python ultra-simple-healthy.py
