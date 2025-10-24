@@ -150,24 +150,48 @@ class SimpleEnergyPlusAPI:
             
             # Look for output files
             output_files = os.listdir(output_dir)
-            logger.info(f"📁 Output files: {output_files}")
+            logger.info(f"📁 Output files found: {output_files}")
             
             # Parse CSV files for energy data
             energy_data = {}
+            csv_files_found = 0
             for file in output_files:
                 if file.endswith('.csv'):
+                    csv_files_found += 1
                     csv_path = os.path.join(output_dir, file)
-                    energy_data.update(self.parse_csv_file(csv_path))
+                    logger.info(f"📊 Parsing CSV file: {file}")
+                    parsed_data = self.parse_csv_file(csv_path)
+                    if parsed_data:
+                        energy_data.update(parsed_data)
+                        logger.info(f"✅ CSV data extracted: {list(parsed_data.keys())}")
+            
+            logger.info(f"📊 Total CSV files parsed: {csv_files_found}")
             
             # Parse HTML files for summary
+            html_files_found = 0
             for file in output_files:
                 if file.endswith('.html'):
+                    html_files_found += 1
                     html_path = os.path.join(output_dir, file)
-                    energy_data.update(self.parse_html_file(html_path))
+                    logger.info(f"📊 Parsing HTML file: {file}")
+                    parsed_data = self.parse_html_file(html_path)
+                    if parsed_data:
+                        energy_data.update(parsed_data)
+                        logger.info(f"✅ HTML data extracted: {list(parsed_data.keys())}")
+            
+            logger.info(f"📊 Total HTML files parsed: {html_files_found}")
+            logger.info(f"📊 Total energy data keys: {list(energy_data.keys())}")
             
             # Add fallback calculations if no energy data found
+            using_fallback = False
             if not energy_data or energy_data.get('total_energy_consumption', 0) == 0:
-                logger.warning("⚠️ No energy data found in output files, using fallback calculations")
+                logger.error("❌ NO ENERGY DATA FOUND IN OUTPUT FILES!")
+                logger.error(f"❌ CSV files found: {csv_files_found}")
+                logger.error(f"❌ HTML files found: {html_files_found}")
+                logger.error(f"❌ Output directory: {output_dir}")
+                logger.error(f"❌ Output files: {output_files}")
+                logger.warning("⚠️ Using fallback calculations - THIS IS MOCK DATA!")
+                using_fallback = True
                 # Simple fallback calculations based on building area
                 building_area = 1000  # Default area
                 energy_data.update({
@@ -178,7 +202,9 @@ class SimpleEnergyPlusAPI:
                     'equipment_energy': building_area * 50,  # 50 kWh/m²/year
                     'energy_intensity': 150,
                     'peak_demand': building_area * 150 * 1.3 / 8760,  # Peak factor
-                    'building_area': building_area
+                    'building_area': building_area,
+                    'using_fallback_data': True,
+                    'warning': 'Using fallback mock data - EnergyPlus output parsing failed'
                 })
             
             # Add calculated metrics
