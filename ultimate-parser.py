@@ -137,36 +137,42 @@ class UltimateIDFParser:
     
     def _extract_site_location(self, content: str) -> Dict[str, Any]:
         """Extract Site:Location data"""
-        pattern = r'Site:Location\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)'
+        pattern = r'Site:Location\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
         match = re.search(pattern, content, re.IGNORECASE)
         if match:
-            return {
-                'name': match.group(1).strip(),
-                'latitude': float(match.group(2)),
-                'longitude': float(match.group(3)),
-                'time_zone': float(match.group(4)),
-                'elevation': float(match.group(5)),
-                'terrain': match.group(6).strip()
-            }
+            try:
+                return {
+                    'name': match.group(1).strip(),
+                    'latitude': float(match.group(2).strip()),
+                    'longitude': float(match.group(3).strip()),
+                    'time_zone': float(match.group(4).strip()),
+                    'elevation': float(match.group(5).strip()),
+                    'terrain': match.group(6).strip()
+                }
+            except ValueError:
+                return {'name': 'Unknown', 'latitude': 40.0, 'longitude': -74.0, 'time_zone': -5.0, 'elevation': 0.0, 'terrain': 'City'}
         return {'name': 'Unknown', 'latitude': 40.0, 'longitude': -74.0, 'time_zone': -5.0, 'elevation': 0.0, 'terrain': 'City'}
     
     def _extract_design_days(self, content: str) -> List[Dict[str, Any]]:
         """Extract DesignDay objects"""
-        pattern = r'DesignDay\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)'
+        pattern = r'DesignDay\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
         matches = re.findall(pattern, content, re.IGNORECASE)
         design_days = []
         for match in matches:
-            design_days.append({
-                'name': match[0].strip(),
-                'max_dry_bulb': float(match[1]),
-                'min_dry_bulb': float(match[2])
-            })
+            try:
+                design_days.append({
+                    'name': match[0].strip(),
+                    'max_dry_bulb': float(match[1].strip()),
+                    'min_dry_bulb': float(match[2].strip())
+                })
+            except ValueError:
+                continue
         return design_days
     
     def _extract_climate_zone(self, content: str) -> str:
         """Extract climate zone information"""
         # Look for ClimateZone objects
-        pattern = r'ClimateZone\s*,\s*([^,]+)'
+        pattern = r'ClimateZone\s*,\s*([^,;]+)'
         match = re.search(pattern, content, re.IGNORECASE)
         if match:
             return match.group(1).strip()
@@ -901,20 +907,23 @@ class UltimateIDFParser:
         zones = []
         
         # Zone
-        pattern = r'Zone\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)'
+        pattern = r'Zone\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
         matches = re.findall(pattern, content, re.IGNORECASE)
         for match in matches:
-            zones.append({
-                'name': match[0].strip(),
-                'x_origin': float(match[1]) if match[1].replace('.', '').isdigit() else 0.0,
-                'y_origin': float(match[2]) if match[2].replace('.', '').isdigit() else 0.0,
-                'z_origin': float(match[3]) if match[3].replace('.', '').isdigit() else 0.0,
-                'zone_type': match[4].strip(),
-                'multiplier': float(match[5]) if match[5].replace('.', '').isdigit() else 1.0,
-                'ceiling_height': float(match[6]) if match[6].replace('.', '').isdigit() else 3.0,
-                'volume': float(match[7]) if match[7].replace('.', '').isdigit() else 0.0,
-                'floor_area': float(match[8]) if match[8].replace('.', '').isdigit() else 0.0
-            })
+            try:
+                zones.append({
+                    'name': match[0].strip(),
+                    'x_origin': float(match[1].strip()) if match[1].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'y_origin': float(match[2].strip()) if match[2].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'z_origin': float(match[3].strip()) if match[3].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'zone_type': match[4].strip(),
+                    'multiplier': float(match[5].strip()) if match[5].strip().replace('.', '').replace('-', '').isdigit() else 1.0,
+                    'ceiling_height': float(match[6].strip()) if match[6].strip().replace('.', '').replace('-', '').isdigit() else 3.0,
+                    'volume': float(match[7].strip()) if match[7].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'floor_area': float(match[8].strip()) if match[8].strip().replace('.', '').replace('-', '').isdigit() else 0.0
+                })
+            except ValueError:
+                continue
         
         return zones
     
@@ -923,21 +932,24 @@ class UltimateIDFParser:
         lighting = []
         
         # Lights
-        pattern = r'Lights\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)'
+        pattern = r'Lights\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
         matches = re.findall(pattern, content, re.IGNORECASE)
         for match in matches:
-            lighting.append({
-                'name': match[0].strip(),
-                'zone': match[1].strip(),
-                'schedule': match[2].strip(),
-                'lighting_level': float(match[3]) if match[3].replace('.', '').isdigit() else 0.0,
-                'design_level': float(match[4]) if match[4].replace('.', '').isdigit() else 0.0,
-                'fraction_radiant': float(match[5]) if match[5].replace('.', '').isdigit() else 0.0,
-                'fraction_visible': float(match[6]) if match[6].replace('.', '').isdigit() else 0.0,
-                'fraction_replaceable': float(match[7]) if match[7].replace('.', '').isdigit() else 0.0,
-                'fraction_return_air': float(match[8]) if match[8].replace('.', '').isdigit() else 0.0,
-                'fraction_convected': float(match[9]) if match[9].replace('.', '').isdigit() else 0.0
-            })
+            try:
+                lighting.append({
+                    'name': match[0].strip(),
+                    'zone': match[1].strip(),
+                    'schedule': match[2].strip(),
+                    'lighting_level': float(match[3].strip()) if match[3].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'design_level': float(match[4].strip()) if match[4].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_radiant': float(match[5].strip()) if match[5].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_visible': float(match[6].strip()) if match[6].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_replaceable': float(match[7].strip()) if match[7].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_return_air': float(match[8].strip()) if match[8].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_convected': float(match[9].strip()) if match[9].strip().replace('.', '').replace('-', '').isdigit() else 0.0
+                })
+            except ValueError:
+                continue
         
         return lighting
     
@@ -946,21 +958,24 @@ class UltimateIDFParser:
         equipment = []
         
         # ElectricEquipment
-        pattern = r'ElectricEquipment\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)'
+        pattern = r'ElectricEquipment\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
         matches = re.findall(pattern, content, re.IGNORECASE)
         for match in matches:
-            equipment.append({
-                'name': match[0].strip(),
-                'zone': match[1].strip(),
-                'schedule': match[2].strip(),
-                'equipment_level': float(match[3]) if match[3].replace('.', '').isdigit() else 0.0,
-                'design_level': float(match[4]) if match[4].replace('.', '').isdigit() else 0.0,
-                'fraction_radiant': float(match[5]) if match[5].replace('.', '').isdigit() else 0.0,
-                'fraction_latent': float(match[6]) if match[6].replace('.', '').isdigit() else 0.0,
-                'fraction_lost': float(match[7]) if match[7].replace('.', '').isdigit() else 0.0,
-                'fraction_convected': float(match[8]) if match[8].replace('.', '').isdigit() else 0.0,
-                'fraction_return_air': float(match[9]) if match[9].replace('.', '').isdigit() else 0.0
-            })
+            try:
+                equipment.append({
+                    'name': match[0].strip(),
+                    'zone': match[1].strip(),
+                    'schedule': match[2].strip(),
+                    'equipment_level': float(match[3].strip()) if match[3].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'design_level': float(match[4].strip()) if match[4].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_radiant': float(match[5].strip()) if match[5].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_latent': float(match[6].strip()) if match[6].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_lost': float(match[7].strip()) if match[7].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_convected': float(match[8].strip()) if match[8].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_return_air': float(match[9].strip()) if match[9].strip().replace('.', '').replace('-', '').isdigit() else 0.0
+                })
+            except ValueError:
+                continue
         
         return equipment
     
