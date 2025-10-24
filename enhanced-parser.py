@@ -21,7 +21,7 @@ class EnhancedParser:
     """Enhanced Parser with Large Payload Support"""
     
     def __init__(self):
-        self.version = "16.2.0"
+        self.version = "16.3.0"
         self.capabilities = [
             'energy_simulation', 'building_analysis', 'idf_parsing', 
             'thermal_analysis', 'weather_analysis', 'hvac_analysis', 
