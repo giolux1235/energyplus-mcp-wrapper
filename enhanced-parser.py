@@ -21,7 +21,7 @@ class EnhancedParser:
     """Enhanced Parser with Large Payload Support"""
     
     def __init__(self):
-        self.version = "16.3.0"
+        self.version = "16.4.0"
         self.capabilities = [
             'energy_simulation', 'building_analysis', 'idf_parsing', 
             'thermal_analysis', 'weather_analysis', 'hvac_analysis', 
@@ -46,6 +46,12 @@ class EnhancedParser:
         """Parse content with support for different types and large payloads"""
         
         try:
+            # DEBUG LOGGING
+            print(f"DEBUG PARSER: Content length: {len(content)} bytes")
+            print(f"DEBUG PARSER: Content type: {content_type}")
+            print(f"DEBUG PARSER: Content starts with: {content[:200]}")
+            print(f"DEBUG PARSER: Content ends with: {content[-200:]}")
+            
             # Initialize analysis
             analysis = {
                 'version': self.version,
@@ -60,13 +66,21 @@ class EnhancedParser:
             
             # Handle different content types
             if content_type == "idf":
+                print("DEBUG PARSER: Processing IDF content")
                 result = self._parse_idf_content(content)
             elif content_type == "weather":
+                print("DEBUG PARSER: Processing weather content")
                 result = self._parse_weather_content(content)
             elif content_type == "combined":
+                print("DEBUG PARSER: Processing combined content")
                 result = self._parse_combined_content(content)
             else:
+                print("DEBUG PARSER: Defaulting to IDF content")
                 result = self._parse_idf_content(content)  # Default to IDF
+            
+            print(f"DEBUG PARSER: Result keys: {list(result.keys())}")
+            print(f"DEBUG PARSER: Building area: {result.get('building_area', 'NOT FOUND')}")
+            print(f"DEBUG PARSER: Total energy: {result.get('total_energy_consumption', 'NOT FOUND')}")
             
             analysis.update(result)
             
@@ -78,6 +92,7 @@ class EnhancedParser:
             return analysis
             
         except Exception as e:
+            print(f"DEBUG PARSER: Error in parse_content: {str(e)}")
             return {
                 'simulation_status': 'error',
                 'error': str(e),
@@ -718,6 +733,13 @@ class EnhancedHTTPServer:
             
             body = request[body_start + 4:]
             
+            # DEBUG LOGGING
+            print("=" * 50)
+            print(f"DEBUG: Request body length: {len(body)} bytes")
+            print(f"DEBUG: Request body starts with: {body[:100]}")
+            print(f"DEBUG: Request body ends with: {body[-100:]}")
+            print("=" * 50)
+            
             try:
                 # Try to parse JSON
                 data = json.loads(body)
@@ -727,24 +749,40 @@ class EnhancedHTTPServer:
                 idf_content = data.get('idf_content', '')
                 weather_content = data.get('weather_content', '')
                 
+                # DEBUG LOGGING
+                print(f"DEBUG: Content type: {content_type}")
+                print(f"DEBUG: IDF content length: {len(idf_content)} bytes")
+                print(f"DEBUG: Weather content length: {len(weather_content)} bytes")
+                print(f"DEBUG: IDF starts with: {idf_content[:100]}")
+                print(f"DEBUG: Weather starts with: {weather_content[:100]}")
+                
                 # Process content based on type
                 if content_type == 'combined' and weather_content:
                     # Combined IDF and weather processing
+                    print("DEBUG: Processing combined content")
                     result = self.parser.parse_content(idf_content + '\n' + weather_content, 'combined')
                 elif content_type == 'weather' and weather_content:
                     # Weather file processing
+                    print("DEBUG: Processing weather content")
                     result = self.parser.parse_content(weather_content, 'weather')
                 elif idf_content:
                     # IDF processing
+                    print("DEBUG: Processing IDF content")
                     result = self.parser.parse_content(idf_content, 'idf')
                 else:
                     self.handle_400(client_socket, "No content provided")
                     return
                 
+                # DEBUG LOGGING
+                print(f"DEBUG: Result status: {result.get('simulation_status', 'Unknown')}")
+                print(f"DEBUG: Building area: {result.get('building_area', 'Unknown')}")
+                print(f"DEBUG: Total energy: {result.get('total_energy_consumption', 'Unknown')}")
+                
                 response = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n{json.dumps(result, indent=2)}"
                 client_socket.send(response.encode('utf-8'))
                 
             except json.JSONDecodeError as e:
+                print(f"DEBUG: JSON decode error: {str(e)}")
                 # If JSON parsing fails, try to extract content directly
                 try:
                     # Look for idf_content in the body
@@ -759,14 +797,17 @@ class EnhancedHTTPServer:
                         # Clean up the content
                         idf_content = idf_content.replace('\\n', '\n').replace('\\"', '"')
                         
+                        print(f"DEBUG: Extracted IDF content length: {len(idf_content)} bytes")
                         result = self.parser.parse_content(idf_content, 'idf')
                         response = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n{json.dumps(result, indent=2)}"
                         client_socket.send(response.encode('utf-8'))
                     else:
                         self.handle_400(client_socket, f"Invalid JSON: {str(e)}")
                 except Exception as parse_error:
+                    print(f"DEBUG: Parse error: {str(parse_error)}")
                     self.handle_400(client_socket, f"Invalid JSON: {str(e)}")
             except Exception as e:
+                print(f"DEBUG: General error: {str(e)}")
                 error_response = {
                     'simulation_status': 'error',
                     'error': str(e),
@@ -776,6 +817,7 @@ class EnhancedHTTPServer:
                 client_socket.send(response.encode('utf-8'))
             
         except Exception as e:
+            print(f"DEBUG: Outer error: {str(e)}")
             error_response = {
                 'simulation_status': 'error',
                 'error': str(e),
