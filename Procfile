@@ -1,1 +1,1 @@
-web: python working-auto-chunking-parser.py
+web: python smart-chunking-parser.py
