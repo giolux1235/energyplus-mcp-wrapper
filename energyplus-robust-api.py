@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "27.0.0"
+        self.version = "27.1.0"
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
         
@@ -244,7 +244,7 @@ class RobustEnergyPlusAPI:
         
         # Try CSV files first
         for file in output_files:
-            if file.endswith('Meter.csv') or file.endswith('Table.csv'):
+            if file.endswith('Meter.csv') or file.endswith('Table.csv') or file.endswith('.csv'):
                 csv_path = os.path.join(output_dir, file)
                 logger.info(f"📊 Parsing CSV: {file}")
                 data = self.parse_energyplus_csv(csv_path)
@@ -252,9 +252,19 @@ class RobustEnergyPlusAPI:
                     energy_data.update(data)
                     logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
+        # Try MTR files (meter files) - these are also CSV format
+        for file in output_files:
+            if file.endswith('.mtr'):
+                mtr_path = os.path.join(output_dir, file)
+                logger.info(f"📊 Parsing MTR: {file}")
+                data = self.parse_energyplus_mtr(mtr_path)
+                if data:
+                    energy_data.update(data)
+                    logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+        
         # Try HTML summary
         for file in output_files:
-            if file.endswith('Table.html') or file.endswith('tbl.html'):
+            if file.endswith('Table.html') or file.endswith('tbl.html') or file.endswith('.html'):
                 html_path = os.path.join(output_dir, file)
                 logger.info(f"📊 Parsing HTML: {file}")
                 data = self.parse_energyplus_html(html_path)
@@ -273,6 +283,83 @@ class RobustEnergyPlusAPI:
                     logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
         return energy_data
+    
+    def parse_energyplus_mtr(self, mtr_path):
+        """Parse EnergyPlus MTR (meter) files - CSV format with energy data"""
+        try:
+            with open(mtr_path, 'r') as f:
+                content = f.read()
+            
+            logger.info(f"📊 MTR content: {len(content)} chars")
+            logger.info(f"📊 First 500 chars:\n{content[:500]}")
+            
+            energy_data = {}
+            total = 0
+            heating = 0
+            cooling = 0
+            lighting = 0
+            equipment = 0
+            
+            lines = content.split('\n')
+            for line in lines:
+                if not line.strip() or line.startswith('Date'):
+                    continue
+                
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) < 2:
+                    continue
+                
+                # MTR files have format: Date/Time, MeterName [Units], Value
+                # Get the meter name and value
+                try:
+                    # Value is usually the last column
+                    value = float(parts[-1])
+                    if value <= 0:
+                        continue
+                    
+                    # Get meter name (second column usually)
+                    meter_name = parts[1].lower() if len(parts) > 1 else ''
+                    
+                    # Convert J to kWh if needed (1 J = 2.77778e-7 kWh)
+                    if '[j]' in meter_name:
+                        value = value * 2.77778e-7
+                    
+                    # Categorize based on meter name
+                    if 'electricity' in meter_name or 'electric' in meter_name:
+                        total += value
+                        
+                        if 'heat' in meter_name:
+                            heating += value
+                        elif 'cool' in meter_name:
+                            cooling += value
+                        elif 'light' in meter_name or 'interior lights' in meter_name:
+                            lighting += value
+                        elif 'equipment' in meter_name or 'interior equipment' in meter_name:
+                            equipment += value
+                        else:
+                            # Generic electricity
+                            equipment += value
+                    
+                    elif 'gas' in meter_name or 'naturalgas' in meter_name:
+                        total += value
+                        heating += value  # Gas is typically for heating
+                        
+                except (ValueError, IndexError):
+                    continue
+            
+            if total > 0:
+                energy_data['total_energy_consumption'] = round(total, 2)
+                energy_data['heating_energy'] = round(heating, 2)
+                energy_data['cooling_energy'] = round(cooling, 2)
+                energy_data['lighting_energy'] = round(lighting, 2)
+                energy_data['equipment_energy'] = round(equipment, 2)
+                logger.info(f"✅ MTR parsed: Total={total:.2f} kWh")
+            
+            return energy_data
+            
+        except Exception as e:
+            logger.error(f"❌ MTR parse error: {e}")
+            return {}
     
     def parse_energyplus_csv(self, csv_path):
         """Parse EnergyPlus CSV files"""
