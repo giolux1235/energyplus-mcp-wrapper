@@ -925,7 +925,28 @@ class UltimateIDFParser:
             except ValueError:
                 continue
         
+        # Extract ZoneArea objects and update zone areas
+        zone_areas = self._extract_zone_areas(content)
+        for zone in zones:
+            zone_name = zone['name']
+            if zone_name in zone_areas:
+                zone['floor_area'] = zone_areas[zone_name]
+        
         return zones
+    
+    def _extract_zone_areas(self, content: str) -> Dict[str, float]:
+        """Extract ZoneArea objects"""
+        zone_areas = {}
+        pattern = r'ZoneArea\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
+        matches = re.findall(pattern, content, re.IGNORECASE)
+        for match in matches:
+            try:
+                zone_name = match[0].strip()
+                area = float(match[1].strip())
+                zone_areas[zone_name] = area
+            except ValueError:
+                continue
+        return zone_areas
     
     def _extract_lighting(self, content: str) -> List[Dict[str, Any]]:
         """Extract lighting information"""
@@ -984,21 +1005,24 @@ class UltimateIDFParser:
         occupancy = []
         
         # People
-        pattern = r'People\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)\s*,\s*([^,]+)'
+        pattern = r'People\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)\s*,\s*([^,;]+)'
         matches = re.findall(pattern, content, re.IGNORECASE)
         for match in matches:
-            occupancy.append({
-                'name': match[0].strip(),
-                'zone': match[1].strip(),
-                'schedule': match[2].strip(),
-                'people_count': float(match[3]) if match[3].replace('.', '').isdigit() else 0.0,
-                'design_level': float(match[4]) if match[4].replace('.', '').isdigit() else 0.0,
-                'fraction_radiant': float(match[5]) if match[5].replace('.', '').isdigit() else 0.0,
-                'fraction_latent': float(match[6]) if match[6].replace('.', '').isdigit() else 0.0,
-                'fraction_convected': float(match[7]) if match[7].replace('.', '').isdigit() else 0.0,
-                'fraction_return_air': float(match[8]) if match[8].replace('.', '').isdigit() else 0.0,
-                'fraction_replaceable': float(match[9]) if match[9].replace('.', '').isdigit() else 0.0
-            })
+            try:
+                occupancy.append({
+                    'name': match[0].strip(),
+                    'zone': match[1].strip(),
+                    'schedule': match[2].strip(),
+                    'people_count': float(match[3].strip()) if match[3].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'design_level': float(match[4].strip()) if match[4].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_radiant': float(match[5].strip()) if match[5].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_latent': float(match[6].strip()) if match[6].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_convected': float(match[7].strip()) if match[7].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_return_air': float(match[8].strip()) if match[8].strip().replace('.', '').replace('-', '').isdigit() else 0.0,
+                    'fraction_replaceable': float(match[9].strip()) if match[9].strip().replace('.', '').replace('-', '').isdigit() else 0.0
+                })
+            except (ValueError, IndexError):
+                continue
         
         return occupancy
     
