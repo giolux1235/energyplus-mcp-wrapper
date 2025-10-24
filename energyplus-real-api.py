@@ -222,13 +222,70 @@ class RealEnergyPlusAPI:
             "timestamp": datetime.now().isoformat()
         }
     
+    def read_full_request_body(self, client_socket):
+        """Read complete request body for large requests"""
+        try:
+            # Read headers first
+            headers = {}
+            buffer = b''
+            
+            # Read headers line by line
+            while True:
+                chunk = client_socket.recv(1024)
+                if not chunk:
+                    break
+                buffer += chunk
+                
+                # Check if we have complete headers
+                if b'\r\n\r\n' in buffer:
+                    header_data, body_start = buffer.split(b'\r\n\r\n', 1)
+                    break
+            
+            # Parse headers
+            header_lines = header_data.decode('utf-8').split('\r\n')
+            for line in header_lines[1:]:  # Skip request line
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    headers[key.strip().lower()] = value.strip()
+            
+            # Get content length
+            content_length = int(headers.get('content-length', 0))
+            logger.info(f"📏 Content-Length: {content_length} bytes")
+            
+            if content_length == 0:
+                logger.warning("⚠️ No Content-Length header")
+                return body_start.decode('utf-8', errors='ignore')
+            
+            # Read remaining body
+            body = body_start
+            remaining = content_length - len(body_start)
+            
+            logger.info(f"📊 Body start: {len(body_start)} bytes, remaining: {remaining} bytes")
+            
+            # Read in chunks
+            while remaining > 0:
+                chunk_size = min(8192, remaining)
+                chunk = client_socket.recv(chunk_size)
+                if not chunk:
+                    logger.error(f"❌ Connection closed, expected {remaining} more bytes")
+                    break
+                body += chunk
+                remaining -= len(chunk)
+            
+            logger.info(f"✅ Read complete body: {len(body)} bytes")
+            return body.decode('utf-8', errors='ignore')
+            
+        except Exception as e:
+            logger.error(f"❌ Error reading request body: {e}")
+            return ""
+
     def handle_request(self, client_socket, address):
         """Handle HTTP request"""
         try:
             logger.info(f"📥 Request from {address}")
             
-            # Read request
-            request = client_socket.recv(4096).decode('utf-8')
+            # Read complete request body
+            request = self.read_full_request_body(client_socket)
             
             # Parse request
             lines = request.split('\n')
@@ -265,15 +322,31 @@ class RealEnergyPlusAPI:
             elif path == '/simulate' and method == 'POST':
                 # Simulation endpoint
                 try:
+                    logger.info(f"📊 Processing simulation request...")
+                    logger.info(f"📊 Request size: {len(request)} bytes")
+                    
                     # Find JSON in request
                     json_start = request.find('{')
                     if json_start == -1:
+                        logger.error("❌ No JSON body found in request")
                         response = self.create_response(400, json.dumps({"error": "No JSON body"}))
                         client_socket.send(response.encode())
                         return
                     
                     json_body = request[json_start:]
-                    data = json.loads(json_body)
+                    logger.info(f"📊 JSON body size: {len(json_body)} bytes")
+                    logger.info(f"📊 JSON preview: {json_body[:200]}...")
+                    
+                    # Parse JSON with error handling
+                    try:
+                        data = json.loads(json_body)
+                        logger.info("✅ JSON parsed successfully")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"❌ JSON parsing failed: {e}")
+                        logger.error(f"❌ JSON body end: {json_body[-200:]}")
+                        response = self.create_response(400, json.dumps({"error": f"Invalid JSON: {str(e)}"}))
+                        client_socket.send(response.encode())
+                        return
                     
                     # Extract content
                     idf_content = data.get('idf_content', '')
@@ -325,6 +398,9 @@ class RealEnergyPlusAPI:
         try:
             server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Increase buffer sizes for large requests
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10 * 1024 * 1024)  # 10MB
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 * 1024 * 1024)  # 10MB
             server_socket.bind((self.host, self.port))
             server_socket.listen(5)
             
@@ -333,6 +409,10 @@ class RealEnergyPlusAPI:
             while True:
                 try:
                     client_socket, address = server_socket.accept()
+                    # Set socket options for large requests
+                    client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10 * 1024 * 1024)  # 10MB
+                    client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 * 1024 * 1024)  # 10MB
+                    client_socket.settimeout(300)  # 5 minute timeout
                     thread = threading.Thread(target=self.handle_request, args=(client_socket, address))
                     thread.daemon = True
                     thread.start()
