@@ -1,1 +1,1 @@
-web: python minimal-parser.py
+web: python railway-api-fixed.py
