@@ -1,1 +1,1 @@
-web: python energyplus-real-api.py
+web: python energyplus-simple-api.py
