@@ -1,1 +1,1 @@
-web: python robust-parser.py
+web: python minimal-parser.py
