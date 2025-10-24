@@ -25,8 +25,8 @@ class RealEnergyPlusAPI:
         self.port = int(os.environ.get('PORT', 8080))
         
         # EnergyPlus paths
-        self.energyplus_exe = os.environ.get('ENERGYPLUS_EXE', '/usr/local/EnergyPlus-23-2-0/energyplus')
-        self.energyplus_idd = os.environ.get('ENERGYPLUS_IDD', '/usr/local/EnergyPlus-23-2-0/Energy+.idd')
+        self.energyplus_exe = os.environ.get('ENERGYPLUS_EXE', '/usr/local/EnergyPlus-25-1-0/energyplus')
+        self.energyplus_idd = os.environ.get('ENERGYPLUS_IDD', '/usr/local/EnergyPlus-25-1-0/Energy+.idd')
         
         # Working directories
         self.inputs_dir = '/app/inputs'
@@ -154,7 +154,7 @@ class RealEnergyPlusAPI:
             response = {
                 "version": self.version,
                 "simulation_status": "success",
-                "energyplus_version": "23.2.0",
+                "energyplus_version": "25.1.0",
                 "real_simulation": True,
                 "processing_time": datetime.now().isoformat(),
                 **energy_data

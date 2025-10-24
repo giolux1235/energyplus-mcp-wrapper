@@ -3,8 +3,8 @@ FROM ubuntu:22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ENERGYPLUS_VERSION=23.2.0
-ENV ENERGYPLUS_INSTALL_DIR=/usr/local/EnergyPlus-23-2-0
+ENV ENERGYPLUS_VERSION=25.1.0
+ENV ENERGYPLUS_INSTALL_DIR=/usr/local/EnergyPlus-25-1-0
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -50,17 +50,17 @@ RUN apt-get update && apt-get install -y \
 
 # Download and install EnergyPlus
 RUN cd /tmp && \
-    wget -O EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz \
-    "https://github.com/NREL/EnergyPlus/releases/download/v23.2.0/EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz" && \
-    tar -xzf EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz && \
-    mv EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64 /usr/local/EnergyPlus-23-2-0 && \
-    rm EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz
+    wget -O EnergyPlus-25-1-0-Linux-Ubuntu22.04-x86_64.tar.gz \
+    "https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.tar.gz" && \
+    tar -xzf EnergyPlus-25-1-0-Linux-Ubuntu22.04-x86_64.tar.gz && \
+    mv EnergyPlus-25-1-0-68a4a7c774-Linux-Ubuntu22.04-x86_64 /usr/local/EnergyPlus-25-1-0 && \
+    rm EnergyPlus-25-1-0-Linux-Ubuntu22.04-x86_64.tar.gz
 
 # Set EnergyPlus environment variables
-ENV ENERGYPLUS_EXE=/usr/local/EnergyPlus-23-2-0/energyplus
-ENV ENERGYPLUS_IDD=/usr/local/EnergyPlus-23-2-0/Energy+.idd
-ENV ENERGYPLUS_WEATHER_DIR=/usr/local/EnergyPlus-23-2-0/WeatherData
-ENV ENERGYPLUS_PLUGIN_DIR=/usr/local/EnergyPlus-23-2-0/PreProcess/EPMacro
+ENV ENERGYPLUS_EXE=/usr/local/EnergyPlus-25-1-0/energyplus
+ENV ENERGYPLUS_IDD=/usr/local/EnergyPlus-25-1-0/Energy+.idd
+ENV ENERGYPLUS_WEATHER_DIR=/usr/local/EnergyPlus-25-1-0/WeatherData
+ENV ENERGYPLUS_PLUGIN_DIR=/usr/local/EnergyPlus-25-1-0/PreProcess/EPMacro
 
 # Create working directories
 RUN mkdir -p /app/inputs /app/outputs /app/logs
@@ -78,10 +78,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Make EnergyPlus executable
-RUN chmod +x /usr/local/EnergyPlus-23-2-0/energyplus
+RUN chmod +x /usr/local/EnergyPlus-25-1-0/energyplus
 
 # Test EnergyPlus installation
-RUN /usr/local/EnergyPlus-23-2-0/energyplus --version
+RUN /usr/local/EnergyPlus-25-1-0/energyplus --version
 
 # Expose port
 EXPOSE 8080
