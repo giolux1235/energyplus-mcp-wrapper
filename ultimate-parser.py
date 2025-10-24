@@ -1226,6 +1226,10 @@ class UltimateHTTPServer:
         print(f"🚀 Ultimate EnergyPlus Parser v{self.parser.version} running on {self.host}:{self.port}")
         print(f"📊 Professional Features: {len(self.parser.professional_features)}")
         print(f"🎯 Accuracy Level: {self.parser.accuracy_level}")
+        print("⏳ Server starting up...")
+        import time
+        time.sleep(2)  # Give server time to fully initialize
+        print("✅ Server ready for healthchecks!")
         
         while True:
             client_socket, address = server_socket.accept()
@@ -1255,7 +1259,7 @@ class UltimateHTTPServer:
             if method == 'GET':
                 if path == '/':
                     self.handle_root(client_socket)
-                elif path == '/health':
+                elif path == '/health' or path == '/healthz':
                     self.handle_health(client_socket)
                 else:
                     self.handle_404(client_socket)
@@ -1294,14 +1298,20 @@ class UltimateHTTPServer:
     
     def handle_health(self, client_socket):
         """Handle health check"""
-        response_data = {
-            'status': 'healthy',
-            'version': self.parser.version,
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        response = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{json.dumps(response_data)}"
-        client_socket.send(response.encode('utf-8'))
+        try:
+            response_data = {
+                'status': 'healthy',
+                'version': self.parser.version,
+                'service': 'Ultimate EnergyPlus Parser',
+                'timestamp': datetime.now().isoformat(),
+                'ready': True
+            }
+            
+            response = f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n\r\n{json.dumps(response_data)}"
+            client_socket.send(response.encode('utf-8'))
+        except Exception as e:
+            error_response = f"HTTP/1.1 500 Internal Server Error\r\nContent-Type: application/json\r\n\r\n{{\"status\": \"error\", \"error\": \"{str(e)}\"}}"
+            client_socket.send(error_response.encode('utf-8'))
     
     def handle_simulate(self, client_socket, request):
         """Handle simulation requests with ultimate professional analysis"""
