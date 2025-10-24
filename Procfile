@@ -1,1 +1,1 @@
-web: python enhanced-parser.py
+web: python thermal-parser.py
