@@ -1,1 +1,1 @@
-web: python railway-fixed-parser.py
+web: python auto-chunking-parser.py
