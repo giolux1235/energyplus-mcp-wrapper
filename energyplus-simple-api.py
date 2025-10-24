@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class SimpleEnergyPlusAPI:
     def __init__(self):
-        self.version = "26.0.0"
+        self.version = "26.2.0"
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
         
