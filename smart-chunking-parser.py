@@ -16,7 +16,7 @@ class SmartChunkingParser:
     """Smart Chunking Parser - Only chunks when actually needed"""
     
     def __init__(self):
-        self.version = "20.0.0"
+        self.version = "20.1.0"
         self.railway_limit = 1000000  # 1MB Railway limit (found through testing)
         self.chunk_size = 500000  # 500KB chunks
         
@@ -350,20 +350,26 @@ class SmartChunkingParser:
                 'chunks_processed': len(all_results)
             }
             
-            # Combine building data (NO DOUBLING)
+            # Combine building data (FIXED - NO DOUBLING)
+            # Use the building area from the FIRST chunk only (they're all the same)
             total_building_area = 0
             all_zones = []
             all_lighting = []
             all_equipment = []
             all_occupancy = []
             
+            # Get building area from first successful result only
             for result in all_results:
                 if result.get('simulation_status') == 'success':
-                    # Combine building areas (NO DOUBLING)
                     building_area = result.get('building_area', 0)
-                    if isinstance(building_area, (int, float)):
-                        total_building_area += building_area
-                    
+                    if isinstance(building_area, (int, float)) and total_building_area == 0:
+                        total_building_area = building_area  # Use first chunk's area only
+                        print(f"SMART PARSER: Using building area from first chunk: {total_building_area}")
+                    break
+            
+            # Combine all objects from all chunks
+            for result in all_results:
+                if result.get('simulation_status') == 'success':
                     # Combine zones
                     zones = result.get('building_analysis', {}).get('zones', [])
                     all_zones.extend(zones)
@@ -395,7 +401,7 @@ class SmartChunkingParser:
                     lighting_energy += result.get('lighting_energy', 0)
                     equipment_energy += result.get('equipment_energy', 0)
             
-            # Calculate metrics
+            # Calculate metrics using correct building area
             energy_intensity = total_energy / total_building_area if total_building_area > 0 else 0
             peak_demand = total_energy * 1.3 / 8760  # kW
             
@@ -408,6 +414,8 @@ class SmartChunkingParser:
                 performance_rating = 'Average'
             else:
                 performance_rating = 'Poor'
+            
+            print(f"SMART PARSER: Combined result - Building area: {total_building_area} (FIXED - NO DOUBLING), Total energy: {total_energy}")
             
             # Build combined result
             combined.update({
