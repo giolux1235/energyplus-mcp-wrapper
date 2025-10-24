@@ -16,7 +16,7 @@ class SmartChunkingParser:
     """Smart Chunking Parser - Only chunks when actually needed"""
     
     def __init__(self):
-        self.version = "20.1.0"
+        self.version = "20.2.0"
         self.railway_limit = 1000000  # 1MB Railway limit (found through testing)
         self.chunk_size = 500000  # 500KB chunks
         
@@ -526,8 +526,9 @@ class SmartChunkingHTTPServer:
             client_socket.close()
     
     def read_full_request(self, client_socket):
-        """Read full request"""
+        """Read full request - FIXED VERSION"""
         try:
+            # Read headers first
             headers = b""
             while True:
                 chunk = client_socket.recv(1024)
@@ -537,28 +538,54 @@ class SmartChunkingHTTPServer:
                 if b"\r\n\r\n" in headers:
                     break
             
+            # Parse headers
             header_text = headers.decode('utf-8', errors='ignore')
             content_length = 0
             for line in header_text.split('\n'):
                 if line.lower().startswith('content-length:'):
-                    content_length = int(line.split(':')[1].strip())
+                    try:
+                        content_length = int(line.split(':')[1].strip())
+                    except ValueError:
+                        content_length = 0
                     break
             
+            print(f"SMART SERVER: Content-Length: {content_length}")
+            
+            # Read body
             body = b""
             if content_length > 0:
+                # Extract body from headers if it's already there
                 body_start = headers.find(b"\r\n\r\n")
                 if body_start != -1:
                     body = headers[body_start + 4:]
                 
+                # Read remaining body
                 while len(body) < content_length:
-                    chunk = client_socket.recv(min(32768, content_length - len(body)))
+                    remaining = content_length - len(body)
+                    chunk_size = min(32768, remaining)
+                    chunk = client_socket.recv(chunk_size)
+                    if not chunk:
+                        print(f"SMART SERVER: Connection closed, expected {content_length} bytes, got {len(body)}")
+                        break
+                    body += chunk
+                
+                print(f"SMART SERVER: Read {len(body)} bytes of body")
+            else:
+                print("SMART SERVER: No content-length header, reading until connection closes")
+                # No content-length, read until connection closes
+                while True:
+                    chunk = client_socket.recv(1024)
                     if not chunk:
                         break
                     body += chunk
             
-            return (header_text + body.decode('utf-8', errors='ignore'))
+            # Combine headers and body
+            full_request = header_text + body.decode('utf-8', errors='ignore')
+            print(f"SMART SERVER: Full request length: {len(full_request)}")
+            return full_request
+            
         except Exception as e:
-            print(f"Error reading request: {e}")
+            print(f"SMART SERVER: Error reading request: {e}")
             return None
     
     def handle_root(self, client_socket):
@@ -599,6 +626,9 @@ class SmartChunkingHTTPServer:
             body = request[body_start + 4:]
             
             try:
+                print(f"SMART SERVER: Attempting to parse JSON body (length: {len(body)})")
+                print(f"SMART SERVER: Body preview: {body[:200]}...")
+                
                 data = json.loads(body)
                 
                 content_type = data.get('content_type', 'idf')
