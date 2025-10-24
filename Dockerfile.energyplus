@@ -1,41 +1,94 @@
-# Use Python 3.10 slim as base (proven to work with EnergyPlus)
-FROM python:3.10-slim
+# EnergyPlus Dockerfile - Step by Step Implementation
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ENERGYPLUS_VERSION=23.2.0
+ENV ENERGYPLUS_INSTALL_DIR=/usr/local/EnergyPlus-23-2-0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    unzip \
+    build-essential \
+    gfortran \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libxrandr2 \
+    libxss1 \
+    libgconf-2-4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxss1 \
+    libasound2 \
+    libatk1.0-0 \
+    libcairo-gobject2 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    libxrandr2 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxss1 \
+    libgconf-2-4 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxss1 \
+    libasound2 \
+    libatk1.0-0 \
+    libcairo-gobject2 \
+    libgtk-3-0 \
+    libgdk-pixbuf2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install EnergyPlus
+RUN cd /tmp && \
+    wget -O EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz \
+    "https://github.com/NREL/EnergyPlus/releases/download/v23.2.0/EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz" && \
+    tar -xzf EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz && \
+    mv EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64 /usr/local/EnergyPlus-23-2-0 && \
+    rm EnergyPlus-23-2-0-Linux-Ubuntu22.04-x86_64.tar.gz
+
+# Set EnergyPlus environment variables
+ENV ENERGYPLUS_EXE=/usr/local/EnergyPlus-23-2-0/energyplus
+ENV ENERGYPLUS_IDD=/usr/local/EnergyPlus-23-2-0/Energy+.idd
+ENV ENERGYPLUS_WEATHER_DIR=/usr/local/EnergyPlus-23-2-0/WeatherData
+ENV ENERGYPLUS_PLUGIN_DIR=/usr/local/EnergyPlus-23-2-0/PreProcess/EPMacro
+
+# Create working directories
+RUN mkdir -p /app/inputs /app/outputs /app/logs
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y wget unzip libgomp1 libx11-6 && \
-    rm -rf /var/lib/apt/lists/*
-
-# Download and install EnergyPlus in unattended mode
-RUN wget https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run && \
-    chmod +x EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run && \
-    ./EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run --mode unattended --install-dir /usr/local/EnergyPlus && \
-    rm EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.run
-
-# Set environment variables for EnergyPlus
-ENV PATH="/usr/local/EnergyPlus:$PATH"
-ENV ENERGYPLUS_DIR="/usr/local/EnergyPlus"
-ENV ENERGYPLUS_EXE="/usr/local/EnergyPlus/energyplus"
-ENV ENERGYPLUS_IDD="/usr/local/EnergyPlus/Energy+.idd"
-
-# Copy requirements and install Python dependencies
+# Copy Python requirements
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application
+# Copy application files
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p logs outputs sample_files
+# Make EnergyPlus executable
+RUN chmod +x /usr/local/EnergyPlus-23-2-0/energyplus
 
-# Set environment variables
-ENV WORKSPACE_ROOT=/app/EnergyPlus-MCP/energyplus-mcp-server
-ENV PORT=8080
+# Test EnergyPlus installation
+RUN /usr/local/EnergyPlus-23-2-0/energyplus --version
 
+# Expose port
 EXPOSE 8080
 
-# Use the full HTTP wrapper with EnergyPlus
-CMD ["python", "simple-http-wrapper.py"]
+# Set environment variables for the application
+ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+
+# Start the application
+CMD ["python", "energyplus-real-api.py"]
