@@ -20,4 +20,4 @@ ENV PORT=8080
 EXPOSE 8080
 
 # Run the EnergyPlus simulator with full capabilities
-CMD ["python", "thermal-parser.py"]
+CMD ["python", "professional-parser.py"]
