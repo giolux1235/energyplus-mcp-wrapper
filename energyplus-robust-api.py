@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "27.1.0"
+        self.version = "27.2.0"
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
         
@@ -288,77 +288,133 @@ class RobustEnergyPlusAPI:
         """Parse EnergyPlus MTR (meter) files - CSV format with energy data"""
         try:
             with open(mtr_path, 'r') as f:
-                content = f.read()
+                lines = f.readlines()
             
-            logger.info(f"📊 MTR content: {len(content)} chars")
-            logger.info(f"📊 First 500 chars:\n{content[:500]}")
+            logger.info(f"📊 MTR file: {mtr_path}")
+            logger.info(f"📊 MTR lines: {len(lines)}")
+            if lines:
+                logger.info(f"📊 First line: {lines[0][:200]}")
             
-            energy_data = {}
+            # MTR files can have different formats
+            # Parse header to find column indices
+            header = lines[0] if lines else ""
+            columns = [col.strip() for col in header.split(',')]
+            logger.info(f"📊 MTR columns: {columns}")
+            
+            # Track energy by category using meter-specific accumulators
+            meter_totals = {}
+            
+            for i, line in enumerate(lines[1:], start=1):  # Skip header
+                if not line.strip():
+                    continue
+                
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) < len(columns):
+                    continue
+                
+                try:
+                    # Each column after the first (Date/Time) is a meter
+                    for col_idx in range(1, len(columns)):
+                        if col_idx >= len(parts):
+                            continue
+                        
+                        meter_name = columns[col_idx].lower()
+                        value_str = parts[col_idx]
+                        
+                        # Skip if not a number
+                        if not value_str or value_str == '':
+                            continue
+                        
+                        try:
+                            value = float(value_str)
+                        except ValueError:
+                            continue
+                        
+                        if value <= 0:
+                            continue
+                        
+                        # Convert J to kWh if needed
+                        if '[j]' in meter_name:
+                            value = value * 2.77778e-7  # J to kWh
+                        
+                        # Sum up values for this meter
+                        if meter_name not in meter_totals:
+                            meter_totals[meter_name] = 0
+                        meter_totals[meter_name] += value
+                        
+                except (ValueError, IndexError) as e:
+                    continue
+            
+            logger.info(f"📊 Meter totals found: {list(meter_totals.keys())}")
+            for meter, total in meter_totals.items():
+                logger.info(f"   {meter}: {total:.2f}")
+            
+            # Now categorize the totals
             total = 0
             heating = 0
             cooling = 0
             lighting = 0
             equipment = 0
+            fans = 0
+            pumps = 0
             
-            lines = content.split('\n')
-            for line in lines:
-                if not line.strip() or line.startswith('Date'):
-                    continue
-                
-                parts = [p.strip() for p in line.split(',')]
-                if len(parts) < 2:
-                    continue
-                
-                # MTR files have format: Date/Time, MeterName [Units], Value
-                # Get the meter name and value
-                try:
-                    # Value is usually the last column
-                    value = float(parts[-1])
-                    if value <= 0:
-                        continue
-                    
-                    # Get meter name (second column usually)
-                    meter_name = parts[1].lower() if len(parts) > 1 else ''
-                    
-                    # Convert J to kWh if needed (1 J = 2.77778e-7 kWh)
-                    if '[j]' in meter_name:
-                        value = value * 2.77778e-7
-                    
-                    # Categorize based on meter name
-                    if 'electricity' in meter_name or 'electric' in meter_name:
+            for meter_name, value in meter_totals.items():
+                # Check specific meter names
+                if 'heating:electricity' in meter_name or 'heating:naturalgas' in meter_name:
+                    heating += value
+                    total += value
+                elif 'cooling:electricity' in meter_name:
+                    cooling += value
+                    total += value
+                elif 'interiorlights:electricity' in meter_name or 'interior lights:electricity' in meter_name:
+                    lighting += value
+                    total += value
+                elif 'interiorequipment:electricity' in meter_name or 'interior equipment:electricity' in meter_name:
+                    equipment += value
+                    total += value
+                elif 'fans:electricity' in meter_name:
+                    fans += value
+                    total += value
+                elif 'pumps:electricity' in meter_name:
+                    pumps += value
+                    total += value
+                elif 'electricity:facility' in meter_name or 'electricitynet:facility' in meter_name:
+                    # This is the total - use it if we don't have subcategories
+                    if total == 0:
+                        total = value
+                elif 'naturalgas:facility' in meter_name:
+                    # Add gas to heating and total
+                    if 'naturalgas' not in [k for k in meter_totals.keys() if 'heating' in k]:
+                        heating += value
                         total += value
-                        
-                        if 'heat' in meter_name:
-                            heating += value
-                        elif 'cool' in meter_name:
-                            cooling += value
-                        elif 'light' in meter_name or 'interior lights' in meter_name:
-                            lighting += value
-                        elif 'equipment' in meter_name or 'interior equipment' in meter_name:
-                            equipment += value
-                        else:
-                            # Generic electricity
-                            equipment += value
-                    
-                    elif 'gas' in meter_name or 'naturalgas' in meter_name:
-                        total += value
-                        heating += value  # Gas is typically for heating
-                        
-                except (ValueError, IndexError):
-                    continue
             
+            energy_data = {}
             if total > 0:
                 energy_data['total_energy_consumption'] = round(total, 2)
                 energy_data['heating_energy'] = round(heating, 2)
                 energy_data['cooling_energy'] = round(cooling, 2)
                 energy_data['lighting_energy'] = round(lighting, 2)
                 energy_data['equipment_energy'] = round(equipment, 2)
-                logger.info(f"✅ MTR parsed: Total={total:.2f} kWh")
+                
+                # Add fans and pumps to equipment if present
+                if fans > 0:
+                    energy_data['fans_energy'] = round(fans, 2)
+                if pumps > 0:
+                    energy_data['pumps_energy'] = round(pumps, 2)
+                
+                logger.info(f"✅ MTR parsed successfully:")
+                logger.info(f"   Total: {total:.2f} kWh")
+                logger.info(f"   Heating: {heating:.2f} kWh")
+                logger.info(f"   Cooling: {cooling:.2f} kWh")
+                logger.info(f"   Lighting: {lighting:.2f} kWh")
+                logger.info(f"   Equipment: {equipment:.2f} kWh")
             
             return energy_data
             
         except Exception as e:
             logger.error(f"❌ MTR parse error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {}
     
     def parse_energyplus_csv(self, csv_path):
