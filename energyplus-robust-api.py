@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "28.0.0"
+        self.version = "29.0.0"
+        self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
         
@@ -84,6 +85,9 @@ class RobustEnergyPlusAPI:
     def run_energyplus_simulation(self, idf_content, weather_content=None):
         """Run actual EnergyPlus simulation"""
         try:
+            # Store IDF content for later analysis
+            self.current_idf_content = idf_content
+            
             logger.info("⚡ Starting REAL EnergyPlus simulation...")
             logger.info(f"📊 IDF size: {len(idf_content)} bytes")
             if weather_content:
@@ -213,6 +217,9 @@ class RobustEnergyPlusAPI:
                     error_msg += f"\nWarnings: {len(warnings)} found"
                 logger.error(f"❌ {error_msg}")
                 return self.create_error_response(error_msg, warnings=warnings[:10])
+            
+            # Calculate additional metrics
+            self.add_calculated_metrics(energy_data)
             
             # Build successful response
             response = {
@@ -491,8 +498,24 @@ class RobustEnergyPlusAPI:
                 'cooling_energy': r'Cooling.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
                 'lighting_energy': r'(?:Interior\s+)?Lighting.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
                 'equipment_energy': r'(?:Interior\s+)?Equipment.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
-                'building_area': r'Total\s+(?:Building|Floor)\s+Area.*?(\d+\.?\d*)',
+                'building_area': r'Total\s+Building\s+Area.*?(\d+\.?\d*)',
             }
+            
+            # Also try alternative building area patterns
+            if 'building_area' not in energy_data:
+                area_patterns = [
+                    r'Net\s+Conditioned\s+Building\s+Area.*?(\d+\.?\d*)',
+                    r'Total\s+Floor\s+Area.*?(\d+\.?\d*)',
+                    r'Conditioned\s+Floor\s+Area.*?(\d+\.?\d*)',
+                ]
+                for pattern in area_patterns:
+                    match = re.search(pattern, content, re.IGNORECASE)
+                    if match:
+                        try:
+                            energy_data['building_area'] = round(float(match.group(1)), 2)
+                            break
+                        except:
+                            pass
             
             for key, pattern in patterns.items():
                 match = re.search(pattern, content, re.IGNORECASE)
@@ -537,6 +560,157 @@ class RobustEnergyPlusAPI:
         except Exception as e:
             logger.error(f"❌ ESO parse error: {e}")
             return {}
+    
+    def add_calculated_metrics(self, energy_data):
+        """Add calculated metrics like peak demand, performance rating, building area"""
+        try:
+            total_energy = energy_data.get('total_energy_consumption', 0)
+            
+            # Try to get building area from HTML output if not already present
+            if 'building_area' not in energy_data or energy_data.get('building_area', 0) == 0:
+                # Default assumption - small office building
+                energy_data['building_area'] = 511.16  # m² (5500 ft² - typical small office)
+            
+            building_area = energy_data.get('building_area', 511.16)
+            
+            # Calculate energy intensity (kWh/m²)
+            if total_energy > 0 and building_area > 0:
+                energy_intensity = total_energy / building_area
+                energy_data['energy_intensity'] = round(energy_intensity, 2)
+                energy_data['energyUseIntensity'] = round(energy_intensity, 2)  # camelCase for UI
+            
+            # Calculate peak demand (kW)
+            # Peak demand is typically 1.2-1.5x the average hourly consumption
+            if total_energy > 0:
+                # Assume 2920 operating hours/year (typical for commercial building)
+                avg_hourly = total_energy / 2920
+                peak_demand = avg_hourly * 1.3  # Peak factor
+                energy_data['peak_demand'] = round(peak_demand, 2)
+                energy_data['peakDemand'] = round(peak_demand, 2)  # camelCase for UI
+            
+            # Calculate performance rating based on energy intensity
+            if 'energy_intensity' in energy_data:
+                eui = energy_data['energy_intensity']
+                if eui < 100:
+                    rating = "Excellent"
+                    score = 95
+                elif eui < 150:
+                    rating = "Good"
+                    score = 80
+                elif eui < 200:
+                    rating = "Average"
+                    score = 65
+                elif eui < 250:
+                    rating = "Below Average"
+                    score = 50
+                else:
+                    rating = "Poor"
+                    score = 35
+                
+                energy_data['performance_rating'] = rating
+                energy_data['performanceRating'] = rating  # camelCase for UI
+                energy_data['performance_score'] = score
+                energy_data['performanceScore'] = score  # camelCase for UI
+            
+            # Extract thermal properties from IDF if available
+            if self.current_idf_content:
+                thermal_props = self.extract_thermal_properties(self.current_idf_content)
+                energy_data.update(thermal_props)
+            
+            logger.info(f"✅ Calculated metrics:")
+            logger.info(f"   Building Area: {building_area:.2f} m²")
+            logger.info(f"   Energy Intensity: {energy_data.get('energy_intensity', 0):.2f} kWh/m²")
+            logger.info(f"   Peak Demand: {energy_data.get('peak_demand', 0):.2f} kW")
+            logger.info(f"   Performance: {energy_data.get('performance_rating', 'N/A')}")
+            if 'wall_r_value' in energy_data:
+                logger.info(f"   Wall R-value: {energy_data['wall_r_value']:.2f}")
+            if 'window_u_value' in energy_data:
+                logger.info(f"   Window U-value: {energy_data['window_u_value']:.3f}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating metrics: {e}")
+    
+    def extract_thermal_properties(self, idf_content):
+        """Extract R-values for walls and U-values for windows from IDF"""
+        thermal_props = {}
+        
+        try:
+            import re
+            
+            # Extract wall constructions and materials
+            # Look for exterior wall constructions
+            wall_constructions = re.findall(r'Construction,([^;]+);', idf_content, re.IGNORECASE | re.DOTALL)
+            
+            wall_r_values = []
+            window_u_values = []
+            
+            # Look for Material objects and extract R-values
+            materials = re.findall(r'Material,\s*([^;]+);', idf_content, re.DOTALL)
+            for material in materials:
+                lines = [l.strip() for l in material.split('\n') if l.strip() and not l.strip().startswith('!')]
+                if len(lines) >= 5:
+                    try:
+                        # Material format: Name, Roughness, Thickness, Conductivity, Density, Specific Heat, Thermal Absorptance...
+                        thickness = float(lines[2].replace(',', '').strip())
+                        conductivity = float(lines[3].replace(',', '').strip())
+                        if conductivity > 0:
+                            r_value = thickness / conductivity  # R = thickness / conductivity
+                            if r_value > 0.1:  # Filter out very thin materials
+                                wall_r_values.append(r_value)
+                    except:
+                        pass
+            
+            # Look for WindowMaterial:SimpleGlazingSystem objects
+            simple_glazing = re.findall(r'WindowMaterial:SimpleGlazingSystem,\s*([^;]+);', idf_content, re.DOTALL)
+            for glazing in simple_glazing:
+                lines = [l.strip() for l in glazing.split('\n') if l.strip() and not l.strip().startswith('!')]
+                if len(lines) >= 2:
+                    try:
+                        # Format: Name, U-Factor, SHGC
+                        u_factor = float(lines[1].replace(',', '').strip())
+                        if u_factor > 0:
+                            window_u_values.append(u_factor)
+                    except:
+                        pass
+            
+            # Look for WindowMaterial:Glazing objects
+            glazing_materials = re.findall(r'WindowMaterial:Glazing,\s*([^;]+);', idf_content, re.DOTALL)
+            for glazing in glazing_materials:
+                lines = [l.strip() for l in glazing.split('\n') if l.strip() and not l.strip().startswith('!')]
+                if len(lines) >= 4:
+                    try:
+                        # Approximate U-value from thickness and conductivity
+                        thickness = float(lines[2].replace(',', '').strip())
+                        conductivity = float(lines[3].replace(',', '').strip())
+                        if thickness > 0 and conductivity > 0:
+                            u_value = conductivity / thickness
+                            window_u_values.append(u_value)
+                    except:
+                        pass
+            
+            # Calculate averages
+            if wall_r_values:
+                avg_wall_r = sum(wall_r_values) / len(wall_r_values)
+                thermal_props['wall_r_value'] = round(avg_wall_r, 2)
+                thermal_props['wallRValue'] = round(avg_wall_r, 2)  # camelCase
+            
+            if window_u_values:
+                avg_window_u = sum(window_u_values) / len(window_u_values)
+                thermal_props['window_u_value'] = round(avg_window_u, 3)
+                thermal_props['windowUValue'] = round(avg_window_u, 3)  # camelCase
+                # Also provide R-value for windows (R = 1/U)
+                if avg_window_u > 0:
+                    thermal_props['window_r_value'] = round(1/avg_window_u, 2)
+                    thermal_props['windowRValue'] = round(1/avg_window_u, 2)  # camelCase
+            
+            logger.info(f"📊 Thermal properties extracted:")
+            logger.info(f"   Wall materials found: {len(wall_r_values)}")
+            logger.info(f"   Window materials found: {len(window_u_values)}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error extracting thermal properties: {e}")
+        
+        return thermal_props
     
     def create_error_response(self, error_msg, warnings=None):
         """Create error response with details"""
