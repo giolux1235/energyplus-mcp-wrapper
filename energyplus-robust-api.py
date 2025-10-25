@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "30.2.0"
+        self.version = "31.0.0"
         self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
@@ -535,8 +535,14 @@ class RobustEnergyPlusAPI:
                     'Cooling': 0,
                     'Interior Lighting': 0,
                     'Interior Equipment': 0,
+                    'Exterior Equipment': 0,
                     'Fans': 0,
                     'Pumps': 0,
+                    'Heat Rejection': 0,
+                    'Humidification': 0,
+                    'Heat Recovery': 0,
+                    'Water Systems': 0,
+                    'Refrigeration': 0,
                     'Exterior Lighting': 0,
                 }
                 
@@ -558,15 +564,30 @@ class RobustEnergyPlusAPI:
                         if total_gj > 0:
                             logger.info(f"   {category}: {total_gj:.2f} GJ = {categories[category]:.2f} kWh")
                 
-                # Map to our energy data structure
+                # Map to our energy data structure (main categories)
                 energy_data['heating_energy'] = round(categories.get('Heating', 0), 2)
-                energy_data['cooling_energy'] = round(categories.get('Cooling', 0), 2)
+                energy_data['cooling_energy'] = round(categories.get('Cooling', 0) + categories.get('Heat Rejection', 0), 2)
                 energy_data['lighting_energy'] = round(categories.get('Interior Lighting', 0) + categories.get('Exterior Lighting', 0), 2)
-                energy_data['equipment_energy'] = round(categories.get('Interior Equipment', 0), 2)
+                energy_data['equipment_energy'] = round(
+                    categories.get('Interior Equipment', 0) + 
+                    categories.get('Exterior Equipment', 0) + 
+                    categories.get('Refrigeration', 0), 2)
                 energy_data['fans_energy'] = round(categories.get('Fans', 0), 2)
                 energy_data['pumps_energy'] = round(categories.get('Pumps', 0), 2)
                 
-                # Calculate total from breakdown
+                # Add specialty categories separately for detailed analysis
+                if categories.get('Heat Rejection', 0) > 0:
+                    energy_data['heat_rejection_energy'] = round(categories.get('Heat Rejection', 0), 2)
+                if categories.get('Humidification', 0) > 0:
+                    energy_data['humidification_energy'] = round(categories.get('Humidification', 0), 2)
+                if categories.get('Heat Recovery', 0) > 0:
+                    energy_data['heat_recovery_energy'] = round(categories.get('Heat Recovery', 0), 2)
+                if categories.get('Water Systems', 0) > 0:
+                    energy_data['water_systems_energy'] = round(categories.get('Water Systems', 0), 2)
+                if categories.get('Refrigeration', 0) > 0:
+                    energy_data['refrigeration_energy'] = round(categories.get('Refrigeration', 0), 2)
+                
+                # Calculate total from ALL categories
                 total = sum([
                     energy_data.get('heating_energy', 0),
                     energy_data.get('cooling_energy', 0),
@@ -574,6 +595,9 @@ class RobustEnergyPlusAPI:
                     energy_data.get('equipment_energy', 0),
                     energy_data.get('fans_energy', 0),
                     energy_data.get('pumps_energy', 0),
+                    categories.get('Humidification', 0),
+                    categories.get('Heat Recovery', 0),
+                    categories.get('Water Systems', 0),
                 ])
                 
                 if total > 0:
