@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "29.0.0"
+        self.version = "30.0.0"
         self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
@@ -244,50 +244,57 @@ class RobustEnergyPlusAPI:
             return self.create_error_response(error_msg)
     
     def parse_all_output_files(self, output_dir):
-        """Parse all output files - CSV, ESO, MTR, HTML"""
+        """Parse all output files - HTML first (most reliable), then MTR, CSV, ESO"""
         energy_data = {}
         
         output_files = os.listdir(output_dir)
+        logger.info(f"📁 Output files: {output_files}")
         
-        # Try CSV files first
-        for file in output_files:
-            if file.endswith('Meter.csv') or file.endswith('Table.csv') or file.endswith('.csv'):
-                csv_path = os.path.join(output_dir, file)
-                logger.info(f"📊 Parsing CSV: {file}")
-                data = self.parse_energyplus_csv(csv_path)
-                if data:
-                    energy_data.update(data)
-                    logger.info(f"✅ Got data from {file}: {list(data.keys())}")
-        
-        # Try MTR files (meter files) - these are also CSV format
-        for file in output_files:
-            if file.endswith('.mtr'):
-                mtr_path = os.path.join(output_dir, file)
-                logger.info(f"📊 Parsing MTR: {file}")
-                data = self.parse_energyplus_mtr(mtr_path)
-                if data:
-                    energy_data.update(data)
-                    logger.info(f"✅ Got data from {file}: {list(data.keys())}")
-        
-        # Try HTML summary
+        # Try HTML summary FIRST - it has the most complete and reliable data
         for file in output_files:
             if file.endswith('Table.html') or file.endswith('tbl.html') or file.endswith('.html'):
                 html_path = os.path.join(output_dir, file)
                 logger.info(f"📊 Parsing HTML: {file}")
                 data = self.parse_energyplus_html(html_path)
                 if data:
-                    energy_data.update(data)
+                    # HTML data takes priority - don't let other parsers overwrite it
+                    for key, value in data.items():
+                        if key not in energy_data or value > 0:  # Only update if we don't have data or new data is non-zero
+                            energy_data[key] = value
                     logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
-        # Try ESO file (EnergyPlus Standard Output)
-        for file in output_files:
-            if file.endswith('.eso'):
-                eso_path = os.path.join(output_dir, file)
-                logger.info(f"📊 Parsing ESO: {file}")
-                data = self.parse_energyplus_eso(eso_path)
-                if data:
-                    energy_data.update(data)
-                    logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+        # Try MTR files (meter files) - only if HTML didn't provide complete data
+        if energy_data.get('total_energy_consumption', 0) == 0:
+            for file in output_files:
+                if file.endswith('.mtr'):
+                    mtr_path = os.path.join(output_dir, file)
+                    logger.info(f"📊 Parsing MTR: {file}")
+                    data = self.parse_energyplus_mtr(mtr_path)
+                    if data:
+                        energy_data.update(data)
+                        logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+        
+        # Try CSV files - as fallback
+        if energy_data.get('total_energy_consumption', 0) == 0:
+            for file in output_files:
+                if file.endswith('Meter.csv') or file.endswith('Table.csv') or file.endswith('.csv'):
+                    csv_path = os.path.join(output_dir, file)
+                    logger.info(f"📊 Parsing CSV: {file}")
+                    data = self.parse_energyplus_csv(csv_path)
+                    if data:
+                        energy_data.update(data)
+                        logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+        
+        # Try ESO file (EnergyPlus Standard Output) - last resort
+        if energy_data.get('total_energy_consumption', 0) == 0:
+            for file in output_files:
+                if file.endswith('.eso'):
+                    eso_path = os.path.join(output_dir, file)
+                    logger.info(f"📊 Parsing ESO: {file}")
+                    data = self.parse_energyplus_eso(eso_path)
+                    if data:
+                        energy_data.update(data)
+                        logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
         return energy_data
     
@@ -482,7 +489,7 @@ class RobustEnergyPlusAPI:
             return {}
     
     def parse_energyplus_html(self, html_path):
-        """Parse EnergyPlus HTML summary"""
+        """Parse EnergyPlus HTML summary - Enhanced to extract End Uses table"""
         try:
             with open(html_path, 'r') as f:
                 content = f.read()
@@ -491,48 +498,95 @@ class RobustEnergyPlusAPI:
             
             energy_data = {}
             
-            # Extract values using regex
-            patterns = {
-                'total_energy_consumption': r'Total\s+Site\s+Energy.*?(\d+\.?\d*)',
-                'heating_energy': r'Heating.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
-                'cooling_energy': r'Cooling.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
-                'lighting_energy': r'(?:Interior\s+)?Lighting.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
-                'equipment_energy': r'(?:Interior\s+)?Equipment.*?(\d+\.?\d*)\s*(?:GJ|kWh)',
-                'building_area': r'Total\s+Building\s+Area.*?(\d+\.?\d*)',
-            }
+            # Extract building area first
+            area_patterns = [
+                r'Net\s+Conditioned\s+Building\s+Area</td>\s*<td[^>]*>\s*([\d.]+)',
+                r'Total\s+Building\s+Area</td>\s*<td[^>]*>\s*([\d.]+)',
+                r'Total\s+Floor\s+Area</td>\s*<td[^>]*>\s*([\d.]+)',
+            ]
             
-            # Also try alternative building area patterns
-            if 'building_area' not in energy_data:
-                area_patterns = [
-                    r'Net\s+Conditioned\s+Building\s+Area.*?(\d+\.?\d*)',
-                    r'Total\s+Floor\s+Area.*?(\d+\.?\d*)',
-                    r'Conditioned\s+Floor\s+Area.*?(\d+\.?\d*)',
-                ]
-                for pattern in area_patterns:
-                    match = re.search(pattern, content, re.IGNORECASE)
-                    if match:
-                        try:
-                            energy_data['building_area'] = round(float(match.group(1)), 2)
-                            break
-                        except:
-                            pass
-            
-            for key, pattern in patterns.items():
+            for pattern in area_patterns:
                 match = re.search(pattern, content, re.IGNORECASE)
                 if match:
                     try:
-                        value = float(match.group(1))
-                        # Convert GJ to kWh if needed
-                        if 'GJ' in match.group(0):
-                            value = value * 277.778  # 1 GJ = 277.778 kWh
-                        energy_data[key] = round(value, 2)
+                        area = float(match.group(1))
+                        energy_data['building_area'] = round(area, 2)
+                        logger.info(f"✅ Building area found: {area:.2f} m²")
+                        break
                     except:
                         pass
+            
+            # Extract End Uses table data
+            # This table has rows for Heating, Cooling, Interior Lighting, Interior Equipment, Fans, Pumps
+            # Each row has columns for different fuel types (Electricity, Natural Gas, etc.)
+            
+            # Find the End Uses table
+            end_uses_match = re.search(r'<b>End Uses</b>.*?<table[^>]*>(.*?)</table>', content, re.DOTALL | re.IGNORECASE)
+            
+            if end_uses_match:
+                table_content = end_uses_match.group(1)
+                logger.info("✅ Found End Uses table")
+                
+                # Extract energy by category
+                # Pattern: <td align="right">Category</td> followed by energy values
+                categories = {
+                    'Heating': 0,
+                    'Cooling': 0,
+                    'Interior Lighting': 0,
+                    'Interior Equipment': 0,
+                    'Fans': 0,
+                    'Pumps': 0,
+                    'Exterior Lighting': 0,
+                }
+                
+                for category in categories.keys():
+                    # Find the row for this category
+                    # Pattern: <tr><td>Category</td><td>Electricity[GJ]</td><td>NaturalGas[GJ]</td>...
+                    category_pattern = rf'<td[^>]*>{category}</td>(.*?)</tr>'
+                    category_match = re.search(category_pattern, table_content, re.DOTALL | re.IGNORECASE)
+                    
+                    if category_match:
+                        row_content = category_match.group(1)
+                        # Extract all numeric values from this row (they're in GJ)
+                        values = re.findall(r'<td[^>]*>\s*([\d.]+)\s*</td>', row_content)
+                        
+                        # Sum all fuel types for this category
+                        total_gj = sum(float(v) for v in values if v != '0.00')
+                        categories[category] = total_gj * 277.778  # Convert GJ to kWh
+                        
+                        if total_gj > 0:
+                            logger.info(f"   {category}: {total_gj:.2f} GJ = {categories[category]:.2f} kWh")
+                
+                # Map to our energy data structure
+                energy_data['heating_energy'] = round(categories.get('Heating', 0), 2)
+                energy_data['cooling_energy'] = round(categories.get('Cooling', 0), 2)
+                energy_data['lighting_energy'] = round(categories.get('Interior Lighting', 0) + categories.get('Exterior Lighting', 0), 2)
+                energy_data['equipment_energy'] = round(categories.get('Interior Equipment', 0), 2)
+                energy_data['fans_energy'] = round(categories.get('Fans', 0), 2)
+                energy_data['pumps_energy'] = round(categories.get('Pumps', 0), 2)
+                
+                # Calculate total from breakdown
+                total = sum([
+                    energy_data.get('heating_energy', 0),
+                    energy_data.get('cooling_energy', 0),
+                    energy_data.get('lighting_energy', 0),
+                    energy_data.get('equipment_energy', 0),
+                    energy_data.get('fans_energy', 0),
+                    energy_data.get('pumps_energy', 0),
+                ])
+                
+                if total > 0:
+                    energy_data['total_energy_consumption'] = round(total, 2)
+                    logger.info(f"✅ Total energy from HTML: {total:.2f} kWh")
+            else:
+                logger.warning("⚠️  End Uses table not found in HTML")
             
             return energy_data
             
         except Exception as e:
             logger.error(f"❌ HTML parse error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {}
     
     def parse_energyplus_eso(self, eso_path):
