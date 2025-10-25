@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "31.1.0"
+        self.version = "32.0.0"
         self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
@@ -586,22 +586,41 @@ class RobustEnergyPlusAPI:
                 if categories.get('Refrigeration', 0) > 0:
                     energy_data['refrigeration_energy'] = round(categories.get('Refrigeration', 0), 2)
                 
-                # Calculate total from ALL categories (main 6 + specialty)
-                total = sum([
-                    categories.get('Heating', 0),
-                    categories.get('Cooling', 0),
-                    categories.get('Interior Lighting', 0),
-                    categories.get('Exterior Lighting', 0),
-                    categories.get('Interior Equipment', 0),
-                    categories.get('Exterior Equipment', 0),
-                    categories.get('Fans', 0),
-                    categories.get('Pumps', 0),
-                    categories.get('Heat Rejection', 0),
-                    categories.get('Humidification', 0),
-                    categories.get('Heat Recovery', 0),
-                    categories.get('Water Systems', 0),
-                    categories.get('Refrigeration', 0),
-                ])
+                # Get total from "Total End Uses" row (EnergyPlus already calculated it correctly)
+                total_end_uses_pattern = r'<td[^>]*>Total End Uses</td>(.*?)</tr>'
+                total_match = re.search(total_end_uses_pattern, table_content, re.DOTALL | re.IGNORECASE)
+                
+                total = 0
+                if total_match:
+                    row_content = total_match.group(1)
+                    # Extract all numeric values (they're in GJ, excluding the last column which is Water in m³)
+                    values = re.findall(r'<td[^>]*>\s*([\d.]+)\s*</td>', row_content)
+                    
+                    # Sum all energy values (not water) - typically first 13 columns
+                    # Last column is Water [m³], not energy
+                    energy_values_gj = [float(v) for v in values[:-1] if v != '0.00']
+                    total_gj = sum(energy_values_gj)
+                    total = total_gj * 277.778  # Convert to kWh
+                    
+                    logger.info(f"✅ Total from 'Total End Uses' row: {total_gj:.2f} GJ = {total:.2f} kWh")
+                else:
+                    # Fallback: sum categories manually if Total End Uses row not found
+                    logger.warning("⚠️  'Total End Uses' row not found, summing categories manually")
+                    total = sum([
+                        categories.get('Heating', 0),
+                        categories.get('Cooling', 0),
+                        categories.get('Interior Lighting', 0),
+                        categories.get('Exterior Lighting', 0),
+                        categories.get('Interior Equipment', 0),
+                        categories.get('Exterior Equipment', 0),
+                        categories.get('Fans', 0),
+                        categories.get('Pumps', 0),
+                        categories.get('Heat Rejection', 0),
+                        categories.get('Humidification', 0),
+                        categories.get('Heat Recovery', 0),
+                        categories.get('Water Systems', 0),
+                        categories.get('Refrigeration', 0),
+                    ])
                 
                 if total > 0:
                     energy_data['total_energy_consumption'] = round(total, 2)
