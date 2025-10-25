@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "30.0.0"
+        self.version = "30.1.0"
         self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
@@ -252,7 +252,7 @@ class RobustEnergyPlusAPI:
         
         # Try HTML summary FIRST - it has the most complete and reliable data
         for file in output_files:
-            if file.endswith('Table.html') or file.endswith('tbl.html') or file.endswith('.html'):
+            if file.endswith('Table.html') or file.endswith('tbl.htm') or file.endswith('tbl.html') or file.endswith('.html') or file.endswith('.htm'):
                 html_path = os.path.join(output_dir, file)
                 logger.info(f"📊 Parsing HTML: {file}")
                 data = self.parse_energyplus_html(html_path)
