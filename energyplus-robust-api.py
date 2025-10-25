@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "30.1.0"
+        self.version = "30.2.0"
         self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
@@ -520,8 +520,9 @@ class RobustEnergyPlusAPI:
             # This table has rows for Heating, Cooling, Interior Lighting, Interior Equipment, Fans, Pumps
             # Each row has columns for different fuel types (Electricity, Natural Gas, etc.)
             
-            # Find the End Uses table
-            end_uses_match = re.search(r'<b>End Uses</b>.*?<table[^>]*>(.*?)</table>', content, re.DOTALL | re.IGNORECASE)
+            # Find the ANNUAL End Uses table (not the Demand End Uses table)
+            # Look for the Annual Building Utility Performance Summary table
+            end_uses_match = re.search(r'Annual Building Utility Performance Summary.*?<b>End Uses</b>.*?<table[^>]*>(.*?)</table>', content, re.DOTALL | re.IGNORECASE)
             
             if end_uses_match:
                 table_content = end_uses_match.group(1)
