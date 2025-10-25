@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "27.2.0"
+        self.version = "28.0.0"
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
         
@@ -285,71 +285,70 @@ class RobustEnergyPlusAPI:
         return energy_data
     
     def parse_energyplus_mtr(self, mtr_path):
-        """Parse EnergyPlus MTR (meter) files - CSV format with energy data"""
+        """Parse EnergyPlus MTR (meter) files - Data dictionary format"""
         try:
             with open(mtr_path, 'r') as f:
                 lines = f.readlines()
             
             logger.info(f"📊 MTR file: {mtr_path}")
             logger.info(f"📊 MTR lines: {len(lines)}")
-            if lines:
-                logger.info(f"📊 First line: {lines[0][:200]}")
             
-            # MTR files can have different formats
-            # Parse header to find column indices
-            header = lines[0] if lines else ""
-            columns = [col.strip() for col in header.split(',')]
-            logger.info(f"📊 MTR columns: {columns}")
+            # MTR files have format:
+            # Dictionary line: 61,1,Electricity:Facility [J] !Hourly
+            # Data lines: 61,12113587.62309867
             
-            # Track energy by category using meter-specific accumulators
-            meter_totals = {}
+            # Step 1: Parse data dictionary to map meter IDs to names
+            meter_dict = {}  # {meter_id: meter_name}
             
-            for i, line in enumerate(lines[1:], start=1):  # Skip header
+            for line in lines:
                 if not line.strip():
                     continue
                 
                 parts = [p.strip() for p in line.split(',')]
-                if len(parts) < len(columns):
+                if len(parts) >= 3:
+                    try:
+                        meter_id = int(parts[0])
+                        meter_type = int(parts[1])
+                        
+                        # Type 1 means it's a meter definition
+                        if meter_type == 1 and len(parts[2]) > 1:
+                            # parts[2] is the meter name like "Electricity:Facility [J] !Hourly"
+                            meter_name = parts[2].split('[')[0].strip().lower()
+                            meter_dict[meter_id] = meter_name
+                            logger.info(f"   Found meter {meter_id}: {meter_name}")
+                    except (ValueError, IndexError):
+                        continue
+            
+            logger.info(f"📊 Found {len(meter_dict)} meters in dictionary")
+            
+            # Step 2: Parse data lines and sum values for each meter
+            meter_totals = {}  # {meter_name: total_value}
+            
+            for line in lines:
+                if not line.strip():
                     continue
                 
-                try:
-                    # Each column after the first (Date/Time) is a meter
-                    for col_idx in range(1, len(columns)):
-                        if col_idx >= len(parts):
-                            continue
+                parts = [p.strip() for p in line.split(',')]
+                if len(parts) == 2:  # Data line format: meter_id,value
+                    try:
+                        meter_id = int(parts[0])
+                        value = float(parts[1])
                         
-                        meter_name = columns[col_idx].lower()
-                        value_str = parts[col_idx]
-                        
-                        # Skip if not a number
-                        if not value_str or value_str == '':
-                            continue
-                        
-                        try:
-                            value = float(value_str)
-                        except ValueError:
-                            continue
-                        
-                        if value <= 0:
-                            continue
-                        
-                        # Convert J to kWh if needed
-                        if '[j]' in meter_name:
-                            value = value * 2.77778e-7  # J to kWh
-                        
-                        # Sum up values for this meter
-                        if meter_name not in meter_totals:
-                            meter_totals[meter_name] = 0
-                        meter_totals[meter_name] += value
-                        
-                except (ValueError, IndexError) as e:
-                    continue
+                        if meter_id in meter_dict and value > 0:
+                            meter_name = meter_dict[meter_id]
+                            if meter_name not in meter_totals:
+                                meter_totals[meter_name] = 0
+                            meter_totals[meter_name] += value
+                    except (ValueError, IndexError):
+                        continue
             
-            logger.info(f"📊 Meter totals found: {list(meter_totals.keys())}")
+            logger.info(f"📊 Meter totals:")
             for meter, total in meter_totals.items():
-                logger.info(f"   {meter}: {total:.2f}")
+                # Convert J to kWh
+                total_kwh = total * 2.77778e-7
+                logger.info(f"   {meter}: {total_kwh:.2f} kWh")
             
-            # Now categorize the totals
+            # Step 3: Categorize and convert to kWh
             total = 0
             heating = 0
             cooling = 0
@@ -358,35 +357,36 @@ class RobustEnergyPlusAPI:
             fans = 0
             pumps = 0
             
-            for meter_name, value in meter_totals.items():
-                # Check specific meter names
+            for meter_name, value_j in meter_totals.items():
+                # Convert J to kWh
+                value = value_j * 2.77778e-7
+                
+                # Categorize based on meter name
                 if 'heating:electricity' in meter_name or 'heating:naturalgas' in meter_name:
                     heating += value
-                    total += value
                 elif 'cooling:electricity' in meter_name:
                     cooling += value
-                    total += value
-                elif 'interiorlights:electricity' in meter_name or 'interior lights:electricity' in meter_name:
+                elif 'interiorlights:electricity' in meter_name:
                     lighting += value
-                    total += value
-                elif 'interiorequipment:electricity' in meter_name or 'interior equipment:electricity' in meter_name:
+                elif 'interiorequipment:electricity' in meter_name:
                     equipment += value
-                    total += value
                 elif 'fans:electricity' in meter_name:
                     fans += value
-                    total += value
                 elif 'pumps:electricity' in meter_name:
                     pumps += value
-                    total += value
                 elif 'electricity:facility' in meter_name or 'electricitynet:facility' in meter_name:
-                    # This is the total - use it if we don't have subcategories
+                    # Use facility total only if we don't have breakdown
                     if total == 0:
                         total = value
                 elif 'naturalgas:facility' in meter_name:
-                    # Add gas to heating and total
-                    if 'naturalgas' not in [k for k in meter_totals.keys() if 'heating' in k]:
+                    # Add gas to heating if not already counted
+                    if heating == 0:
                         heating += value
-                        total += value
+            
+            # Calculate total from breakdown if available
+            breakdown_total = heating + cooling + lighting + equipment + fans + pumps
+            if breakdown_total > 0:
+                total = breakdown_total
             
             energy_data = {}
             if total > 0:
@@ -396,7 +396,6 @@ class RobustEnergyPlusAPI:
                 energy_data['lighting_energy'] = round(lighting, 2)
                 energy_data['equipment_energy'] = round(equipment, 2)
                 
-                # Add fans and pumps to equipment if present
                 if fans > 0:
                     energy_data['fans_energy'] = round(fans, 2)
                 if pumps > 0:
@@ -408,6 +407,8 @@ class RobustEnergyPlusAPI:
                 logger.info(f"   Cooling: {cooling:.2f} kWh")
                 logger.info(f"   Lighting: {lighting:.2f} kWh")
                 logger.info(f"   Equipment: {equipment:.2f} kWh")
+                logger.info(f"   Fans: {fans:.2f} kWh")
+                logger.info(f"   Pumps: {pumps:.2f} kWh")
             
             return energy_data
             
