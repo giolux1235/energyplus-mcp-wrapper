@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RobustEnergyPlusAPI:
     def __init__(self):
-        self.version = "32.0.0"
+        self.version = "33.0.0"
         self.current_idf_content = None  # Store IDF content for analysis
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
@@ -813,6 +813,105 @@ class RobustEnergyPlusAPI:
         
         return thermal_props
     
+    def compare_measured_data(self, simulated_result, measured_data):
+        """
+        Compare simulated results with measured energy data from bills
+        
+        Args:
+            simulated_result: Dict with simulation results
+            measured_data: Dict with measured data in format:
+                {
+                    "total_annual_kwh": 150000,
+                    "monthly": [{"month": 1, "kwh": 12000}, ...]
+                }
+        
+        Returns:
+            Dict with comparison results
+        """
+        if not measured_data:
+            return {}
+        
+        comparison = {
+            "validation": {},
+            "recommendations": []
+        }
+        
+        try:
+            simulated_total = simulated_result.get('total_energy_consumption', 0)
+            measured_total = measured_data.get('total_annual_kwh', 0)
+            
+            if measured_total > 0:
+                # Calculate difference
+                difference_kwh = simulated_total - measured_total
+                difference_percent = (difference_kwh / measured_total) * 100
+                
+                comparison["validation"] = {
+                    "simulated_total_kwh": simulated_total,
+                    "measured_total_kwh": measured_total,
+                    "difference_kwh": round(difference_kwh, 2),
+                    "difference_percent": round(difference_percent, 2)
+                }
+                
+                # Determine calibration status
+                abs_diff_percent = abs(difference_percent)
+                if abs_diff_percent < 5:
+                    status = "Excellent Match"
+                    calibration_status = "calibrated"
+                elif abs_diff_percent < 10:
+                    status = "Good Match"
+                    calibration_status = "good"
+                elif abs_diff_percent < 15:
+                    status = "Fair Match"
+                    calibration_status = "fair"
+                else:
+                    status = "Needs Calibration"
+                    calibration_status = "uncalibrated"
+                
+                comparison["validation"]["status"] = status
+                comparison["validation"]["calibration_status"] = calibration_status
+                
+                # Add recommendations based on difference
+                if difference_percent > 10:
+                    if simulated_total < measured_total:
+                        comparison["recommendations"].append(
+                            "Simulated energy is significantly lower than measured. "
+                            "Consider: verifying equipment schedules, plug loads, or HVAC operation hours."
+                        )
+                    else:
+                        comparison["recommendations"].append(
+                            "Simulated energy is significantly higher than measured. "
+                            "Consider: verifying building construction details, occupancy patterns, or system efficiency."
+                        )
+                elif abs_diff_percent < 5:
+                    comparison["recommendations"].append(
+                        "Model accuracy is within acceptable range. "
+                        "The simulation provides a reliable baseline for retrofit analysis."
+                    )
+                
+                # Monthly validation if available
+                monthly_data = measured_data.get('monthly', [])
+                if monthly_data and len(monthly_data) >= 6:
+                    # For now, we'll provide annual comparison
+                    # Advanced monthly validation would require monthly simulation results
+                    comparison["validation"]["has_monthly_data"] = True
+                    comparison["validation"]["months_provided"] = len(monthly_data)
+                    
+                    comparison["recommendations"].append(
+                        f"Monthly data provided for {len(monthly_data)} months. "
+                        "For detailed monthly calibration, consider running monthly simulations."
+                    )
+                
+                logger.info(f"📊 Measured data comparison:")
+                logger.info(f"   Simulated: {simulated_total:,.0f} kWh")
+                logger.info(f"   Measured: {measured_total:,.0f} kWh")
+                logger.info(f"   Difference: {difference_percent:.1f}%")
+                logger.info(f"   Status: {status}")
+        
+        except Exception as e:
+            logger.error(f"❌ Error comparing measured data: {e}")
+        
+        return comparison
+    
     def create_error_response(self, error_msg, warnings=None):
         """Create error response with details"""
         response = {
@@ -885,6 +984,7 @@ class RobustEnergyPlusAPI:
             # Extract IDF and weather content
             idf_content = data.get('idf_content', '')
             weather_content = data.get('weather_content', '')
+            measured_data = data.get('measured_data', None)
             
             if not idf_content:
                 self.send_error_response(client_socket, "Missing idf_content")
@@ -892,9 +992,17 @@ class RobustEnergyPlusAPI:
             
             logger.info(f"📊 IDF content: {len(idf_content)} bytes")
             logger.info(f"📊 Weather content: {len(weather_content)} bytes")
+            if measured_data:
+                logger.info(f"📊 Measured data provided: {measured_data.get('total_annual_kwh', 'N/A')} kWh")
             
             # Run simulation
             result = self.run_energyplus_simulation(idf_content, weather_content)
+            
+            # Compare with measured data if provided
+            if measured_data and result.get('simulation_status') == 'success':
+                comparison = self.compare_measured_data(result, measured_data)
+                if comparison:
+                    result.update(comparison)
             
             # Send response
             self.send_json_response(client_socket, result)
