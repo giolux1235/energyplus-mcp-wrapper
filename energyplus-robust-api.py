@@ -25,9 +25,17 @@ class RobustEnergyPlusAPI:
         self.host = '0.0.0.0'
         self.port = int(os.environ.get('PORT', 8080))
         
-        # EnergyPlus paths
-        self.energyplus_exe = os.environ.get('ENERGYPLUS_EXE', '/usr/local/EnergyPlus-25-1-0/energyplus')
-        self.energyplus_idd = os.environ.get('ENERGYPLUS_IDD', '/usr/local/EnergyPlus-25-1-0/Energy+.idd')
+        # EnergyPlus paths - try common locations
+        default_exe = '/usr/local/bin/energyplus'
+        if not os.path.exists(default_exe):
+            default_exe = '/usr/local/EnergyPlus-25-1-0/energyplus'
+        
+        default_idd = '/usr/local/bin/Energy+.idd'
+        if not os.path.exists(default_idd):
+            default_idd = '/usr/local/EnergyPlus-25-1-0/Energy+.idd'
+        
+        self.energyplus_exe = os.environ.get('ENERGYPLUS_EXE', default_exe)
+        self.energyplus_idd = os.environ.get('ENERGYPLUS_IDD', default_idd)
         
         logger.info(f"🚀 Robust EnergyPlus API v{self.version} starting...")
         logger.info(f"📊 EnergyPlus EXE: {self.energyplus_exe}")
@@ -325,16 +333,21 @@ class RobustEnergyPlusAPI:
                         energy_data.update(data)
                         logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
-        # Try CSV files - as fallback
-        if energy_data.get('total_energy_consumption', 0) == 0:
-            for file in output_files:
-                if file.endswith('Meter.csv') or file.endswith('Table.csv') or file.endswith('.csv'):
-                    csv_path = os.path.join(output_dir, file)
-                    logger.info(f"📊 Parsing CSV: {file}")
-                    data = self.parse_energyplus_csv(csv_path)
-                    if data:
+        # Try CSV files - as fallback for energy, but always try for building area
+        for file in output_files:
+            if file.endswith('Meter.csv') or file.endswith('Table.csv') or file.endswith('.csv'):
+                csv_path = os.path.join(output_dir, file)
+                logger.info(f"📊 Parsing CSV: {file}")
+                data = self.parse_energyplus_csv(csv_path)
+                if data:
+                    # Always update building_area from CSV if found (most reliable source)
+                    if 'building_area' in data and data['building_area'] > 0:
+                        energy_data['building_area'] = data['building_area']
+                        logger.info(f"✅ Updated building area from CSV: {data['building_area']:.2f} m²")
+                    # Only update energy if we don't have it yet
+                    if energy_data.get('total_energy_consumption', 0) == 0:
                         energy_data.update(data)
-                        logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+                        logger.info(f"✅ Got energy data from {file}: {list(data.keys())}")
         
         # Try ESO file (EnergyPlus Standard Output) - before SQLite
         if energy_data.get('total_energy_consumption', 0) == 0:
@@ -500,13 +513,12 @@ class RobustEnergyPlusAPI:
             return {}
     
     def parse_energyplus_csv(self, csv_path):
-        """Parse EnergyPlus CSV files"""
+        """Parse EnergyPlus CSV files - Enhanced to extract building area"""
         try:
             with open(csv_path, 'r') as f:
                 content = f.read()
             
             logger.info(f"📊 CSV content: {len(content)} chars")
-            logger.info(f"📊 First 500 chars:\n{content[:500]}")
             
             energy_data = {}
             total = 0
@@ -514,14 +526,49 @@ class RobustEnergyPlusAPI:
             cooling = 0
             lighting = 0
             equipment = 0
+            building_area = 0
             
             lines = content.split('\n')
-            for line in lines:
+            for i, line in enumerate(lines):
                 if not line.strip():
                     continue
                 
+                # Extract building area - look for "Total Building Area" or "Area [m2]"
+                line_lower = line.lower()
+                parts = line.split(',')
+                
+                # Check for building area header (format: ",,Area [m2],...")
+                if 'area [m2]' in line_lower or 'area [m²]' in line_lower:
+                    # Next line should have the value
+                    if i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        next_parts = next_line.split(',')
+                        for part in next_parts:
+                            try:
+                                area = float(part.strip())
+                                if 50 < area < 50000:  # Reasonable building area range (m²)
+                                    building_area = area
+                                    energy_data['building_area'] = round(area, 2)
+                                    logger.info(f"✅ Building area from CSV (next line): {area:.2f} m²")
+                                    break
+                            except (ValueError, AttributeError):
+                                continue
+                
+                # Check for building area in same line (format: ",Total Building Area,421.67,")
+                if 'total building area' in line_lower or 'net conditioned building area' in line_lower:
+                    for part in parts:
+                        try:
+                            area = float(part.strip())
+                            if 50 < area < 50000:
+                                building_area = area
+                                energy_data['building_area'] = round(area, 2)
+                                logger.info(f"✅ Building area from CSV (inline): {area:.2f} m²")
+                                break
+                        except (ValueError, AttributeError):
+                            continue
+                
                 # Look for energy values
-                if any(keyword in line.lower() for keyword in ['electricity', 'gas', 'energy']):
+                if any(keyword in line_lower for keyword in ['electricity', 'gas', 'energy']):
                     parts = [p.strip() for p in line.split(',')]
                     if len(parts) >= 2:
                         try:
@@ -530,7 +577,6 @@ class RobustEnergyPlusAPI:
                                 total += value
                                 
                                 # Categorize
-                                line_lower = line.lower()
                                 if 'heat' in line_lower:
                                     heating += value
                                 elif 'cool' in line_lower:
@@ -1120,12 +1166,20 @@ class RobustEnergyPlusAPI:
         try:
             total_energy = energy_data.get('total_energy_consumption', 0)
             
-            # Try to get building area from HTML output if not already present
+            # Try to get building area - should have been extracted by now
             if 'building_area' not in energy_data or energy_data.get('building_area', 0) == 0:
-                # Default assumption - small office building
+                logger.warning("⚠️  WARNING: Could not extract building area from EnergyPlus output!")
+                logger.warning("⚠️  Using default 511.16 m² - EUI calculations may be incorrect!")
+                logger.warning("⚠️  This is a fallback value and should be investigated!")
                 energy_data['building_area'] = 511.16  # m² (5500 ft² - typical small office)
+                energy_data['_area_extraction_failed'] = True  # Flag for debugging
             
             building_area = energy_data.get('building_area', 511.16)
+            
+            # Validate building area is reasonable
+            if building_area < 50 or building_area > 50000:
+                logger.warning(f"⚠️  WARNING: Building area {building_area:.2f} m² seems unreasonable!")
+                logger.warning("⚠️  Expected range: 50-50000 m²")
             
             # Calculate energy intensity (kWh/m²)
             if total_energy > 0 and building_area > 0:
