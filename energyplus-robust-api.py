@@ -179,6 +179,7 @@ class RobustEnergyPlusAPI:
             
             warnings = []
             fatal_errors = []
+            err_content = ""
             if err_file:
                 with open(err_file, 'r') as f:
                     err_content = f.read()
@@ -197,11 +198,16 @@ class RobustEnergyPlusAPI:
                         if '** Warning' in line or '** Severe' in line:
                             warnings.append(line.strip())
             
+            # Collect output info even if there are errors (for debugging)
+            output_info = self.collect_output_info(output_dir, err_file)
+            
             # If fatal errors, return error response with details
             if fatal_errors:
                 error_msg = f"EnergyPlus simulation failed with fatal errors:\n" + "\n".join(fatal_errors[:5])
                 logger.error(f"❌ {error_msg}")
-                return self.create_error_response(error_msg, warnings=warnings)
+                error_response = self.create_error_response(error_msg, warnings=warnings)
+                error_response.update(output_info)  # Include output info even in error case
+                return error_response
             
             # Parse output data
             energy_data = self.parse_all_output_files(output_dir)
@@ -216,7 +222,9 @@ class RobustEnergyPlusAPI:
                 if warnings:
                     error_msg += f"\nWarnings: {len(warnings)} found"
                 logger.error(f"❌ {error_msg}")
-                return self.create_error_response(error_msg, warnings=warnings[:10])
+                error_response = self.create_error_response(error_msg, warnings=warnings[:10])
+                error_response.update(output_info)  # Include output info for debugging
+                return error_response
             
             # Calculate additional metrics
             self.add_calculated_metrics(energy_data)
@@ -231,7 +239,8 @@ class RobustEnergyPlusAPI:
                 "warnings_count": len(warnings),
                 "warnings": warnings[:10] if warnings else [],
                 "processing_time": datetime.now().isoformat(),
-                **energy_data
+                **energy_data,
+                **output_info  # Include error file, output files list, CSV preview, SQLite info
             }
             
             logger.info(f"✅ EnergyPlus output parsed successfully - REAL DATA!")
@@ -661,6 +670,116 @@ class RobustEnergyPlusAPI:
         except Exception as e:
             logger.error(f"❌ ESO parse error: {e}")
             return {}
+    
+    def collect_output_info(self, output_dir, err_file):
+        """
+        Collect additional output information:
+        - Full error file content
+        - List of generated output files
+        - CSV preview (first 500 lines)
+        - SQLite database info
+        """
+        output_info = {}
+        
+        try:
+            # 1. Full error file content
+            if err_file and os.path.exists(err_file):
+                with open(err_file, 'r') as f:
+                    output_info['error_file_content'] = f.read()
+                logger.info(f"✅ Captured full error file content ({len(output_info['error_file_content'])} chars)")
+            
+            # 2. List of generated output files
+            output_files = []
+            if os.path.exists(output_dir):
+                for file in sorted(os.listdir(output_dir)):
+                    file_path = os.path.join(output_dir, file)
+                    file_info = {
+                        "name": file,
+                        "size": os.path.getsize(file_path) if os.path.isfile(file_path) else 0,
+                        "type": "file" if os.path.isfile(file_path) else "directory"
+                    }
+                    output_files.append(file_info)
+            
+            output_info['output_files'] = output_files
+            logger.info(f"✅ Listed {len(output_files)} output files")
+            
+            # 3. CSV preview (first 500 lines)
+            csv_previews = {}
+            for file in output_files:
+                if file['name'].endswith('.csv') and file['type'] == 'file':
+                    csv_path = os.path.join(output_dir, file['name'])
+                    try:
+                        lines = []
+                        total_lines = 0
+                        with open(csv_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            for i, line in enumerate(f):
+                                total_lines += 1
+                                if i < 500:  # First 500 lines
+                                    lines.append(line.rstrip('\n\r'))
+                        
+                        csv_previews[file['name']] = {
+                            "lines": lines,
+                            "total_lines": total_lines,
+                            "preview_lines": len(lines)
+                        }
+                        logger.info(f"✅ Captured CSV preview for {file['name']} ({len(lines)}/{total_lines} lines)")
+                    except Exception as e:
+                        logger.warning(f"⚠️  Could not read CSV {file['name']}: {e}")
+            
+            if csv_previews:
+                output_info['csv_previews'] = csv_previews
+            
+            # 4. SQLite database info
+            sqlite_info = {}
+            for file in output_files:
+                if file['name'].endswith('.sqlite') or file['name'].endswith('.sqlite3') or file['name'].endswith('.db'):
+                    sqlite_path = os.path.join(output_dir, file['name'])
+                    try:
+                        import sqlite3
+                        if os.path.exists(sqlite_path):
+                            conn = sqlite3.connect(sqlite_path)
+                            cursor = conn.cursor()
+                            
+                            # Get table names
+                            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                            tables = [row[0] for row in cursor.fetchall()]
+                            
+                            # Get info for each table
+                            table_info = {}
+                            for table in tables:
+                                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                                row_count = cursor.fetchone()[0]
+                                
+                                cursor.execute(f"PRAGMA table_info({table})")
+                                columns = [{"name": row[1], "type": row[2]} for row in cursor.fetchall()]
+                                
+                                table_info[table] = {
+                                    "row_count": row_count,
+                                    "columns": columns
+                                }
+                            
+                            sqlite_info[file['name']] = {
+                                "tables": tables,
+                                "table_info": table_info,
+                                "file_size": file['size']
+                            }
+                            
+                            conn.close()
+                            logger.info(f"✅ Captured SQLite info for {file['name']} ({len(tables)} tables)")
+                    except ImportError:
+                        logger.warning("⚠️  sqlite3 module not available, cannot read SQLite files")
+                    except Exception as e:
+                        logger.warning(f"⚠️  Could not read SQLite {file['name']}: {e}")
+            
+            if sqlite_info:
+                output_info['sqlite_info'] = sqlite_info
+            
+        except Exception as e:
+            logger.error(f"❌ Error collecting output info: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+        
+        return output_info
     
     def add_calculated_metrics(self, energy_data):
         """Add calculated metrics like peak demand, performance rating, building area"""

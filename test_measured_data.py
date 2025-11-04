@@ -10,9 +10,20 @@ import os
 # Railway API endpoint
 API_URL = "https://web-production-1d1be.up.railway.app/simulate"
 
-# Read the Medium Office file from Desktop
-idf_path = os.path.expanduser("~/Desktop/MediumOffice.idf")
-weather_path = os.path.expanduser("~/Desktop/Chicago.epw")
+# Read the Medium Office file from EnergyPlus installation
+idf_path = "/Applications/EnergyPlus-24-2-0/ExampleFiles/ASHRAE901_OfficeMedium_STD2019_Denver.idf"
+weather_path = "/Applications/EnergyPlus-24-2-0/WeatherData/USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw"
+
+# Check if files exist
+if not os.path.exists(idf_path):
+    print(f"❌ IDF file not found: {idf_path}")
+    print("Please ensure EnergyPlus is installed at /Applications/EnergyPlus-24-2-0/")
+    exit(1)
+
+if not os.path.exists(weather_path):
+    print(f"❌ Weather file not found: {weather_path}")
+    print("Please ensure EnergyPlus is installed at /Applications/EnergyPlus-24-2-0/")
+    exit(1)
 
 print("🧪 Testing Measured Data Comparison Feature")
 print("="*100)
@@ -117,4 +128,10 @@ if response.status_code == 200:
 else:
     print(f"\n❌ API Error: {response.status_code}")
     print(f"Response: {response.text[:500]}")
+
+
+
+
+
+
 
