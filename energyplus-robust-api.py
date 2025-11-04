@@ -246,20 +246,43 @@ class RobustEnergyPlusAPI:
             # Add energy_results field when extraction succeeds
             if energy_data.get('total_energy_consumption', 0) > 0:
                 extraction_method = energy_data.pop('_extraction_method', 'standard')  # Remove internal tracking
+                
+                # Calculate total site energy (electricity + gas)
+                # If we have separate electricity and gas values, sum them
+                if energy_data.get('electricity_kwh', 0) > 0 or energy_data.get('gas_kwh', 0) > 0:
+                    total_site_energy = energy_data.get('electricity_kwh', 0) + energy_data.get('gas_kwh', 0)
+                else:
+                    total_site_energy = energy_data.get('total_energy_consumption', 0)
+                
+                building_area = energy_data.get('building_area', 0)
+                
+                # Calculate EUI if we have both values
+                eui = 0
+                if total_site_energy > 0 and building_area > 0:
+                    eui = total_site_energy / building_area
+                
+                # Build energy_results in the exact format required
                 response['energy_results'] = {
-                    "total_energy_consumption": energy_data.get('total_energy_consumption', 0),
+                    "total_site_energy_kwh": round(total_site_energy, 2),
+                    "building_area_m2": round(building_area, 2),
+                    "eui_kwh_m2": round(eui, 2)
+                }
+                
+                # Also include detailed breakdown for backward compatibility
+                response['energy_results'].update({
                     "heating_energy": energy_data.get('heating_energy', 0),
                     "cooling_energy": energy_data.get('cooling_energy', 0),
                     "lighting_energy": energy_data.get('lighting_energy', 0),
                     "equipment_energy": energy_data.get('equipment_energy', 0),
                     "fans_energy": energy_data.get('fans_energy', 0),
                     "pumps_energy": energy_data.get('pumps_energy', 0),
-                    "building_area": energy_data.get('building_area', 0),
-                    "energy_intensity": energy_data.get('energy_intensity', 0),
-                    "peak_demand": energy_data.get('peak_demand', 0),
                     "extraction_method": extraction_method
-                }
+                })
+                
                 logger.info(f"✅ Added energy_results to response (method: {extraction_method})")
+                logger.info(f"   Total site energy: {total_site_energy:.2f} kWh")
+                logger.info(f"   Building area: {building_area:.2f} m²")
+                logger.info(f"   EUI: {eui:.2f} kWh/m²")
             
             logger.info(f"✅ EnergyPlus output parsed successfully - REAL DATA!")
             logger.info(f"✅ Total energy: {energy_data.get('total_energy_consumption', 0)} kWh")
@@ -747,41 +770,66 @@ class RobustEnergyPlusAPI:
                 meter_results = cursor.fetchall()
                 logger.info(f"📊 Strategy 1 (ReportMeterData): Found {len(meter_results)} facility meters")
                 
+                electricity_kwh = 0
+                gas_kwh = 0
                 total_energy = 0
+                
                 for name, value in meter_results:
                     name_lower = name.lower()
                     value_kwh = value / 3600000  # Convert J to kWh (EnergyPlus stores in J)
                     
+                    # Extract electricity and gas separately
                     if 'electricity:facility' in name_lower or 'electricitynet:facility' in name_lower:
+                        electricity_kwh += value_kwh
+                        total_energy += value_kwh
+                    elif 'naturalgas:facility' in name_lower or 'gas:facility' in name_lower:
+                        gas_kwh += value_kwh
                         total_energy += value_kwh
                     elif 'heating' in name_lower and ('electricity' in name_lower or 'gas' in name_lower):
                         if 'heating_energy' not in energy_data:
                             energy_data['heating_energy'] = 0
                         energy_data['heating_energy'] += value_kwh
+                        if 'gas' in name_lower:
+                            gas_kwh += value_kwh
+                        else:
+                            electricity_kwh += value_kwh
+                        total_energy += value_kwh
                     elif 'cooling:electricity' in name_lower:
                         if 'cooling_energy' not in energy_data:
                             energy_data['cooling_energy'] = 0
                         energy_data['cooling_energy'] += value_kwh
+                        electricity_kwh += value_kwh
+                        total_energy += value_kwh
                     elif 'interiorlights:electricity' in name_lower:
                         if 'lighting_energy' not in energy_data:
                             energy_data['lighting_energy'] = 0
                         energy_data['lighting_energy'] += value_kwh
+                        electricity_kwh += value_kwh
+                        total_energy += value_kwh
                     elif 'interiorequipment:electricity' in name_lower:
                         if 'equipment_energy' not in energy_data:
                             energy_data['equipment_energy'] = 0
                         energy_data['equipment_energy'] += value_kwh
+                        electricity_kwh += value_kwh
+                        total_energy += value_kwh
                     elif 'fans:electricity' in name_lower:
                         if 'fans_energy' not in energy_data:
                             energy_data['fans_energy'] = 0
                         energy_data['fans_energy'] += value_kwh
+                        electricity_kwh += value_kwh
+                        total_energy += value_kwh
                     elif 'pumps:electricity' in name_lower:
                         if 'pumps_energy' not in energy_data:
                             energy_data['pumps_energy'] = 0
                         energy_data['pumps_energy'] += value_kwh
+                        electricity_kwh += value_kwh
+                        total_energy += value_kwh
                 
                 if total_energy > 0:
                     energy_data['total_energy_consumption'] = round(total_energy, 2)
-                    logger.info(f"✅ Strategy 1: Total energy = {total_energy:.2f} kWh")
+                    energy_data['electricity_kwh'] = round(electricity_kwh, 2)
+                    energy_data['gas_kwh'] = round(gas_kwh, 2)
+                    logger.info(f"✅ Strategy 1: Total site energy = {total_energy:.2f} kWh (Electricity: {electricity_kwh:.2f}, Gas: {gas_kwh:.2f})")
                     
             except Exception as e:
                 logger.warning(f"⚠️  Strategy 1 failed: {e}")
@@ -910,6 +958,36 @@ class RobustEnergyPlusAPI:
                 if breakdown_total > 0:
                     energy_data['total_energy_consumption'] = round(breakdown_total, 2)
                     logger.info(f"✅ Calculated total from breakdown: {breakdown_total:.2f} kWh")
+            
+            # Strategy 4: Try to extract building area from SQLite
+            # Look for building area in various tables
+            if energy_data.get('building_area', 0) == 0:
+                try:
+                    # Try ReportData for building area
+                    cursor.execute("""
+                        SELECT 
+                            rdd.Name,
+                            AVG(rd.Value) as AvgValue
+                        FROM ReportData rd
+                        JOIN ReportDataDictionary rdd ON rd.ReportDataDictionaryIndex = rdd.ReportDataDictionaryIndex
+                        WHERE rdd.Name LIKE '%Area%' 
+                           OR rdd.Name LIKE '%Floor%'
+                           OR rdd.Name LIKE '%Building%'
+                        GROUP BY rdd.Name
+                        LIMIT 10
+                    """)
+                    
+                    area_results = cursor.fetchall()
+                    for name, value in area_results:
+                        name_lower = name.lower()
+                        # Look for total or net conditioned area
+                        if 'total' in name_lower or 'net' in name_lower or 'conditioned' in name_lower:
+                            if value > 100:  # Reasonable building area (m²)
+                                energy_data['building_area'] = round(value, 2)
+                                logger.info(f"✅ Found building area from SQLite: {value:.2f} m² ({name})")
+                                break
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not extract building area from SQLite: {e}")
             
             conn.close()
             
