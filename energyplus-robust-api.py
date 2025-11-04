@@ -243,6 +243,24 @@ class RobustEnergyPlusAPI:
                 **output_info  # Include error file, output files list, CSV preview, SQLite info
             }
             
+            # Add energy_results field when extraction succeeds
+            if energy_data.get('total_energy_consumption', 0) > 0:
+                extraction_method = energy_data.pop('_extraction_method', 'standard')  # Remove internal tracking
+                response['energy_results'] = {
+                    "total_energy_consumption": energy_data.get('total_energy_consumption', 0),
+                    "heating_energy": energy_data.get('heating_energy', 0),
+                    "cooling_energy": energy_data.get('cooling_energy', 0),
+                    "lighting_energy": energy_data.get('lighting_energy', 0),
+                    "equipment_energy": energy_data.get('equipment_energy', 0),
+                    "fans_energy": energy_data.get('fans_energy', 0),
+                    "pumps_energy": energy_data.get('pumps_energy', 0),
+                    "building_area": energy_data.get('building_area', 0),
+                    "energy_intensity": energy_data.get('energy_intensity', 0),
+                    "peak_demand": energy_data.get('peak_demand', 0),
+                    "extraction_method": extraction_method
+                }
+                logger.info(f"✅ Added energy_results to response (method: {extraction_method})")
+            
             logger.info(f"✅ EnergyPlus output parsed successfully - REAL DATA!")
             logger.info(f"✅ Total energy: {energy_data.get('total_energy_consumption', 0)} kWh")
             return response
@@ -253,8 +271,9 @@ class RobustEnergyPlusAPI:
             return self.create_error_response(error_msg)
     
     def parse_all_output_files(self, output_dir):
-        """Parse all output files - HTML first (most reliable), then MTR, CSV, ESO"""
+        """Parse all output files - HTML first (most reliable), then MTR, CSV, ESO, SQLite"""
         energy_data = {}
+        extraction_method = "standard"  # Track which method was used
         
         output_files = os.listdir(output_dir)
         logger.info(f"📁 Output files: {output_files}")
@@ -294,7 +313,7 @@ class RobustEnergyPlusAPI:
                         energy_data.update(data)
                         logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
-        # Try ESO file (EnergyPlus Standard Output) - last resort
+        # Try ESO file (EnergyPlus Standard Output) - before SQLite
         if energy_data.get('total_energy_consumption', 0) == 0:
             for file in output_files:
                 if file.endswith('.eso'):
@@ -304,6 +323,22 @@ class RobustEnergyPlusAPI:
                     if data:
                         energy_data.update(data)
                         logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+        
+        # Try SQLite database - when CSV is missing or data not found
+        if energy_data.get('total_energy_consumption', 0) == 0:
+            for file in output_files:
+                if file.endswith('.sqlite') or file.endswith('.sqlite3') or file.endswith('.db'):
+                    sqlite_path = os.path.join(output_dir, file)
+                    logger.info(f"📊 Parsing SQLite: {file}")
+                    data = self.extract_energy_from_sqlite(sqlite_path)
+                    if data and data.get('total_energy_consumption', 0) > 0:
+                        energy_data.update(data)
+                        extraction_method = "sqlite"
+                        logger.info(f"✅ Got data from SQLite {file}: {list(data.keys())}")
+                        break  # Stop after first successful extraction
+        
+        # Store extraction method for reporting
+        energy_data['_extraction_method'] = extraction_method
         
         return energy_data
     
@@ -670,6 +705,227 @@ class RobustEnergyPlusAPI:
         except Exception as e:
             logger.error(f"❌ ESO parse error: {e}")
             return {}
+    
+    def extract_energy_from_sqlite(self, sqlite_path):
+        """
+        Extract energy consumption data from EnergyPlus SQLite database using multiple query strategies.
+        
+        EnergyPlus SQLite databases typically contain:
+        - ReportData: Time series data with ReportDataDictionaryID
+        - ReportDataDictionary: Metadata about variables (Name, Units, etc.)
+        - Time: Timestamp information
+        - ReportMeterData: Meter readings
+        - ReportMeterDataDictionary: Meter metadata
+        """
+        energy_data = {}
+        
+        try:
+            import sqlite3
+            
+            if not os.path.exists(sqlite_path):
+                logger.warning(f"⚠️  SQLite file not found: {sqlite_path}")
+                return energy_data
+            
+            conn = sqlite3.connect(sqlite_path)
+            cursor = conn.cursor()
+            
+            logger.info(f"📊 Extracting energy from SQLite: {sqlite_path}")
+            
+            # Strategy 1: Query ReportMeterData for facility-level meters
+            # This is the most direct way to get total energy consumption
+            try:
+                cursor.execute("""
+                    SELECT 
+                        rmdd.Name,
+                        SUM(rmd.Value) as TotalValue
+                    FROM ReportMeterData rmd
+                    JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                    WHERE rmdd.Name LIKE '%Facility%'
+                    GROUP BY rmdd.Name
+                """)
+                
+                meter_results = cursor.fetchall()
+                logger.info(f"📊 Strategy 1 (ReportMeterData): Found {len(meter_results)} facility meters")
+                
+                total_energy = 0
+                for name, value in meter_results:
+                    name_lower = name.lower()
+                    value_kwh = value / 3600000  # Convert J to kWh (EnergyPlus stores in J)
+                    
+                    if 'electricity:facility' in name_lower or 'electricitynet:facility' in name_lower:
+                        total_energy += value_kwh
+                    elif 'heating' in name_lower and ('electricity' in name_lower or 'gas' in name_lower):
+                        if 'heating_energy' not in energy_data:
+                            energy_data['heating_energy'] = 0
+                        energy_data['heating_energy'] += value_kwh
+                    elif 'cooling:electricity' in name_lower:
+                        if 'cooling_energy' not in energy_data:
+                            energy_data['cooling_energy'] = 0
+                        energy_data['cooling_energy'] += value_kwh
+                    elif 'interiorlights:electricity' in name_lower:
+                        if 'lighting_energy' not in energy_data:
+                            energy_data['lighting_energy'] = 0
+                        energy_data['lighting_energy'] += value_kwh
+                    elif 'interiorequipment:electricity' in name_lower:
+                        if 'equipment_energy' not in energy_data:
+                            energy_data['equipment_energy'] = 0
+                        energy_data['equipment_energy'] += value_kwh
+                    elif 'fans:electricity' in name_lower:
+                        if 'fans_energy' not in energy_data:
+                            energy_data['fans_energy'] = 0
+                        energy_data['fans_energy'] += value_kwh
+                    elif 'pumps:electricity' in name_lower:
+                        if 'pumps_energy' not in energy_data:
+                            energy_data['pumps_energy'] = 0
+                        energy_data['pumps_energy'] += value_kwh
+                
+                if total_energy > 0:
+                    energy_data['total_energy_consumption'] = round(total_energy, 2)
+                    logger.info(f"✅ Strategy 1: Total energy = {total_energy:.2f} kWh")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️  Strategy 1 failed: {e}")
+            
+            # Strategy 2: Query ReportData for end-use variables
+            # This extracts individual end-use categories
+            if energy_data.get('total_energy_consumption', 0) == 0:
+                try:
+                    cursor.execute("""
+                        SELECT 
+                            rdd.Name,
+                            rdd.Units,
+                            SUM(rd.Value) as TotalValue
+                        FROM ReportData rd
+                        JOIN ReportDataDictionary rdd ON rd.ReportDataDictionaryIndex = rdd.ReportDataDictionaryIndex
+                        WHERE rdd.Name LIKE '%Energy%' 
+                           OR rdd.Name LIKE '%Electricity%'
+                           OR rdd.Name LIKE '%Heating%'
+                           OR rdd.Name LIKE '%Cooling%'
+                           OR rdd.Name LIKE '%Lighting%'
+                           OR rdd.Name LIKE '%Equipment%'
+                        GROUP BY rdd.Name, rdd.Units
+                    """)
+                    
+                    report_results = cursor.fetchall()
+                    logger.info(f"📊 Strategy 2 (ReportData): Found {len(report_results)} energy variables")
+                    
+                    total_energy = 0
+                    for name, units, value in report_results:
+                        name_lower = name.lower()
+                        
+                        # Convert to kWh based on units
+                        if units == 'J' or units == 'Joules':
+                            value_kwh = value / 3600000
+                        elif units == 'GJ':
+                            value_kwh = value * 277.778
+                        elif units == 'kWh' or units == 'kWh':
+                            value_kwh = value
+                        else:
+                            value_kwh = value / 3600000  # Default assume J
+                        
+                        # Categorize by name
+                        if 'facility' in name_lower and ('electricity' in name_lower or 'total' in name_lower):
+                            total_energy += value_kwh
+                        elif 'heating' in name_lower:
+                            if 'heating_energy' not in energy_data:
+                                energy_data['heating_energy'] = 0
+                            energy_data['heating_energy'] += value_kwh
+                        elif 'cooling' in name_lower:
+                            if 'cooling_energy' not in energy_data:
+                                energy_data['cooling_energy'] = 0
+                            energy_data['cooling_energy'] += value_kwh
+                        elif 'lighting' in name_lower:
+                            if 'lighting_energy' not in energy_data:
+                                energy_data['lighting_energy'] = 0
+                            energy_data['lighting_energy'] += value_kwh
+                        elif 'equipment' in name_lower:
+                            if 'equipment_energy' not in energy_data:
+                                energy_data['equipment_energy'] = 0
+                            energy_data['equipment_energy'] += value_kwh
+                        elif 'fan' in name_lower:
+                            if 'fans_energy' not in energy_data:
+                                energy_data['fans_energy'] = 0
+                            energy_data['fans_energy'] += value_kwh
+                        elif 'pump' in name_lower:
+                            if 'pumps_energy' not in energy_data:
+                                energy_data['pumps_energy'] = 0
+                            energy_data['pumps_energy'] += value_kwh
+                    
+                    if total_energy > 0:
+                        energy_data['total_energy_consumption'] = round(total_energy, 2)
+                        logger.info(f"✅ Strategy 2: Total energy = {total_energy:.2f} kWh")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️  Strategy 2 failed: {e}")
+            
+            # Strategy 3: Query for annual totals (if available)
+            if energy_data.get('total_energy_consumption', 0) == 0:
+                try:
+                    cursor.execute("""
+                        SELECT 
+                            rdd.Name,
+                            SUM(rd.Value) as TotalValue
+                        FROM ReportData rd
+                        JOIN ReportDataDictionary rdd ON rd.ReportDataDictionaryIndex = rdd.ReportDataDictionaryIndex
+                        WHERE rdd.Name LIKE '%Annual%' 
+                           OR rdd.Name LIKE '%Total%'
+                           OR rdd.Name LIKE '%Sum%'
+                        GROUP BY rdd.Name
+                    """)
+                    
+                    annual_results = cursor.fetchall()
+                    logger.info(f"📊 Strategy 3 (Annual totals): Found {len(annual_results)} annual variables")
+                    
+                    for name, value in annual_results:
+                        name_lower = name.lower()
+                        value_kwh = value / 3600000 if value > 1000000 else value  # Assume J if large, otherwise kWh
+                        
+                        if 'total' in name_lower or 'facility' in name_lower:
+                            if 'total_energy_consumption' not in energy_data:
+                                energy_data['total_energy_consumption'] = 0
+                            energy_data['total_energy_consumption'] += value_kwh
+                    
+                    if energy_data.get('total_energy_consumption', 0) > 0:
+                        energy_data['total_energy_consumption'] = round(energy_data['total_energy_consumption'], 2)
+                        logger.info(f"✅ Strategy 3: Total energy = {energy_data['total_energy_consumption']:.2f} kWh")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️  Strategy 3 failed: {e}")
+            
+            # Round all energy values
+            for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy', 'fans_energy', 'pumps_energy']:
+                if key in energy_data:
+                    energy_data[key] = round(energy_data[key], 2)
+            
+            # Calculate total from breakdown if we have breakdown but no total
+            if energy_data.get('total_energy_consumption', 0) == 0:
+                breakdown_total = sum([
+                    energy_data.get('heating_energy', 0),
+                    energy_data.get('cooling_energy', 0),
+                    energy_data.get('lighting_energy', 0),
+                    energy_data.get('equipment_energy', 0),
+                    energy_data.get('fans_energy', 0),
+                    energy_data.get('pumps_energy', 0)
+                ])
+                if breakdown_total > 0:
+                    energy_data['total_energy_consumption'] = round(breakdown_total, 2)
+                    logger.info(f"✅ Calculated total from breakdown: {breakdown_total:.2f} kWh")
+            
+            conn.close()
+            
+            if energy_data.get('total_energy_consumption', 0) > 0:
+                logger.info(f"✅ SQLite extraction successful: {energy_data.get('total_energy_consumption', 0):.2f} kWh")
+            else:
+                logger.warning("⚠️  SQLite extraction found no energy data")
+            
+        except ImportError:
+            logger.warning("⚠️  sqlite3 module not available")
+        except Exception as e:
+            logger.error(f"❌ SQLite extraction error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+        
+        return energy_data
     
     def collect_output_info(self, output_dir, err_file):
         """
