@@ -2329,7 +2329,7 @@ class RobustEnergyPlusAPI:
             logger.error(f"Traceback: {traceback.format_exc()}")
         finally:
             try:
-            client_socket.close()
+                client_socket.close()
             except:
                 pass
     
