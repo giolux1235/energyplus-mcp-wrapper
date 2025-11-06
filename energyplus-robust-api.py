@@ -455,11 +455,23 @@ class RobustEnergyPlusAPI:
             logger.info(f"📁 Files to parse: {output_files}")
             
             # Parse ERR file first to check for errors
+            # EnergyPlus generates eplusout.err as the main error file
             err_file = None
             for file in output_files:
                 if file.endswith('.err'):
-                    err_file = os.path.join(output_dir, file)
-                    break
+                    # Prefer eplusout.err (main EnergyPlus error file)
+                    if 'eplusout' in file:
+                        err_file = os.path.join(output_dir, file)
+                        break
+                    elif err_file is None:  # Fallback to any .err file
+                        err_file = os.path.join(output_dir, file)
+            
+            # If no .err file found, try eplusout.err directly
+            if err_file is None:
+                potential_err = os.path.join(output_dir, 'eplusout.err')
+                if os.path.exists(potential_err):
+                    err_file = potential_err
+                    logger.info(f"📊 Found eplusout.err directly: {err_file}")
             
             warnings = []
             fatal_errors = []
