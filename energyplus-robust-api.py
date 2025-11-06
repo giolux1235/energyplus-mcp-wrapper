@@ -1304,29 +1304,44 @@ class RobustEnergyPlusAPI:
                 meter_results = cursor.fetchall()
                 logger.info(f"📊 Strategy 1 (ReportMeterData): Found {len(meter_results)} facility meters")
                 
-                # Also query for breakdown meters (heating, cooling, lighting, etc.)
+                # Also query for breakdown meters (heating, cooling, lighting, etc.) - but don't fail if it errors
                 try:
                     # Query for all meters, not just facility-level
-                    cursor.execute("""
-                        SELECT 
-                            COALESCE(rmdd.VariableName, rmdd.KeyValue, 'Unknown') as MeterName,
-                            rmdd.ReportingFrequency,
-                            rmdd.VariableUnits,
-                            rmd.VariableValue as TotalValue
-                        FROM ReportMeterData rmd
-                        JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
-                        JOIN (
+                    if 'VariableName' in dict_columns:
+                        cursor.execute("""
                             SELECT 
-                                rmdd2.ReportMeterDataDictionaryIndex,
-                                MAX(rmd2.TimeIndex) as MaxTimeIndex
-                            FROM ReportMeterData rmd2
-                            JOIN ReportMeterDataDictionary rmdd2 ON rmd2.ReportMeterDataDictionaryIndex = rmdd2.ReportMeterDataDictionaryIndex
-                            WHERE (rmdd2.ReportingFrequency LIKE '%Run Period%' OR rmdd2.ReportingFrequency LIKE '%RunPeriod%')
-                            GROUP BY rmdd2.ReportMeterDataDictionaryIndex
-                        ) max_times ON rmd.ReportMeterDataDictionaryIndex = max_times.ReportMeterDataDictionaryIndex
-                            AND rmd.TimeIndex = max_times.MaxTimeIndex
-                        WHERE (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
-                    """)
+                                COALESCE(rmdd.VariableName, rmdd.KeyValue, 'Unknown') as MeterName,
+                                rmdd.ReportingFrequency,
+                                rmdd.VariableUnits,
+                                rmd.VariableValue as TotalValue
+                            FROM ReportMeterData rmd
+                            JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                            JOIN (
+                                SELECT 
+                                    rmdd2.ReportMeterDataDictionaryIndex,
+                                    MAX(rmd2.TimeIndex) as MaxTimeIndex
+                                FROM ReportMeterData rmd2
+                                JOIN ReportMeterDataDictionary rmdd2 ON rmd2.ReportMeterDataDictionaryIndex = rmdd2.ReportMeterDataDictionaryIndex
+                                WHERE (rmdd2.ReportingFrequency LIKE '%Run Period%' OR rmdd2.ReportingFrequency LIKE '%RunPeriod%')
+                                GROUP BY rmdd2.ReportMeterDataDictionaryIndex
+                            ) max_times ON rmd.ReportMeterDataDictionaryIndex = max_times.ReportMeterDataDictionaryIndex
+                                AND rmd.TimeIndex = max_times.MaxTimeIndex
+                            WHERE (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
+                            LIMIT 50
+                        """)
+                    else:
+                        cursor.execute(f"""
+                            SELECT 
+                                rmdd.{name_col} as MeterName,
+                                rmdd.ReportingFrequency,
+                                rmdd.VariableUnits,
+                                MAX(rmd.{value_col}) as TotalValue
+                            FROM ReportMeterData rmd
+                            JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                            WHERE (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
+                            GROUP BY rmdd.{name_col}
+                            LIMIT 50
+                        """)
                     all_meters = cursor.fetchall()
                     logger.info(f"📊 Found {len(all_meters)} total meters (including breakdown)")
                     if all_meters:
@@ -1341,7 +1356,7 @@ class RobustEnergyPlusAPI:
                                     value_kwh = value / 3600000
                                 logger.info(f"   All meters: {name} | Units: {units} | Value: {value_kwh:.2f} kWh")
                 except Exception as e:
-                    logger.warning(f"⚠️  Could not query all meters: {e}")
+                    logger.warning(f"⚠️  Could not query all meters (non-fatal): {e}")
                 
                 if meter_results:
                     for result in meter_results:
