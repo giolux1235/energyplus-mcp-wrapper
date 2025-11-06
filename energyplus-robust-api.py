@@ -1611,9 +1611,12 @@ class RobustEnergyPlusAPI:
                             corrected_total = total_energy * correction_factor
                             logger.warning(f"   Attempting correction: {total_energy:.2f} * {correction_factor:.4f} = {corrected_total:.2f} kWh")
                             
-                            # Only apply correction if it brings value into reasonable range
-                            if min_expected <= corrected_total <= max_expected * 2:
+                            # Apply correction if it's significantly better (reduces by at least 50%)
+                            # and brings it closer to expected range (within 5x max expected)
+                            improvement_ratio = corrected_total / total_energy
+                            if improvement_ratio < 0.5 and corrected_total <= max_expected * 5:
                                 logger.info(f"   ✅ Applying correction - value was likely annual total")
+                                logger.info(f"   Original: {total_energy:.2f} kWh → Corrected: {corrected_total:.2f} kWh")
                                 energy_data['total_energy_consumption'] = round(corrected_total, 2)
                                 
                                 # Also correct breakdown if present
@@ -1625,6 +1628,8 @@ class RobustEnergyPlusAPI:
                                     energy_data['electricity_kwh'] = round(energy_data['electricity_kwh'] * correction_factor, 2)
                                 if 'gas_kwh' in energy_data:
                                     energy_data['gas_kwh'] = round(energy_data['gas_kwh'] * correction_factor, 2)
+                            else:
+                                logger.warning(f"   ⚠️  Correction didn't help enough (improvement: {improvement_ratio:.2f}, still {corrected_total/max_expected:.1f}x expected)")
             
             # Round all energy values
             for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy', 'fans_energy', 'pumps_energy']:
