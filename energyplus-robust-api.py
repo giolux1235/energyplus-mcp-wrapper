@@ -60,9 +60,100 @@ class RobustEnergyPlusAPI:
         except Exception as e:
             logger.error(f"❌ EnergyPlus test error: {e}")
     
-    def read_request_simple(self, client_socket):
-        """Simple request reading with better handling"""
+    def optimize_idf_for_fast_simulation(self, idf_content):
+        """Optimize IDF for fast simulation by shortening the run period"""
         try:
+            # Find RunPeriod objects - they typically look like:
+            # RunPeriod,
+            #   Name,
+            #   Begin_Month,
+            #   Begin_Day_of_Month,
+            #   End_Month,
+            #   End_Day_of_Month,
+            #   ...
+            
+            # Use regex to find and modify RunPeriod
+            # Pattern: RunPeriod, followed by name, then begin/end month/day
+            run_period_pattern = r'(RunPeriod,\s*\n\s*[^,]+,\s*\n\s*)(\d+)(\s*,\s*!\s*-.*?\n\s*)(\d+)(\s*,\s*!\s*-.*?\n\s*)(\d+)(\s*,\s*!\s*-.*?\n\s*)(\d+)'
+            
+            def replace_run_period(match):
+                name_part = match.group(1)
+                begin_month = int(match.group(2))
+                begin_day = int(match.group(4))
+                end_month = int(match.group(6))
+                end_day = int(match.group(8))
+                
+                # If it's a full year (Jan 1 to Dec 31), change to 1 month (Jan 1 to Jan 31)
+                if begin_month == 1 and begin_day == 1 and end_month == 12 and end_day == 31:
+                    logger.info("   Changing RunPeriod from full year (Jan 1 - Dec 31) to 1 month (Jan 1 - Jan 31)")
+                    return f"{name_part}1{match.group(3)}1{match.group(5)}1{match.group(7)}31"
+                # If it's more than 1 month, reduce to 1 month
+                elif end_month > begin_month or (end_month == begin_month and end_day > 31):
+                    logger.info(f"   Reducing RunPeriod from {begin_month}/{begin_day} to {end_month}/{end_day} to 1 month")
+                    return f"{name_part}{begin_month}{match.group(3)}{begin_day}{match.group(5)}{begin_month}{match.group(7)}31"
+                # Otherwise keep as is
+                else:
+                    logger.info(f"   RunPeriod already short ({begin_month}/{begin_day} to {end_month}/{end_day}), keeping as is")
+                    return match.group(0)
+            
+            # Try to find and replace RunPeriod
+            modified_content = re.sub(run_period_pattern, replace_run_period, idf_content, flags=re.MULTILINE)
+            
+            # Also try a simpler pattern for RunPeriod with different formatting
+            # Pattern: RunPeriod,\n  Name,\n  Begin_Month,\n  Begin_Day,\n  End_Month,\n  End_Day
+            simple_pattern = r'(RunPeriod,[^\n]*\n[^\n]*\n\s*)(\d+)(\s*,\s*[^\n]*\n\s*)(\d+)(\s*,\s*[^\n]*\n\s*)(\d+)(\s*,\s*[^\n]*\n\s*)(\d+)'
+            
+            def replace_simple_run_period(match):
+                begin_month = int(match.group(2))
+                begin_day = int(match.group(4))
+                end_month = int(match.group(6))
+                end_day = int(match.group(8))
+                
+                # If it's a full year or long period, shorten to 1 month
+                if (begin_month == 1 and begin_day == 1 and end_month == 12 and end_day == 31) or \
+                   (end_month > begin_month + 1):
+                    logger.info(f"   Shortening RunPeriod to 1 month (Jan 1-31)")
+                    return f"{match.group(1)}1{match.group(3)}1{match.group(5)}1{match.group(7)}31"
+                return match.group(0)
+            
+            modified_content = re.sub(simple_pattern, replace_simple_run_period, modified_content, flags=re.MULTILINE)
+            
+            # Check if we actually modified anything
+            if modified_content != idf_content:
+                logger.info("✅ IDF RunPeriod optimized for fast simulation")
+                return modified_content
+            else:
+                # Try a more aggressive approach - look for any RunPeriod and modify it
+                # Just find the pattern "End_Month" followed by a number > 1
+                aggressive_pattern = r'(End_Month[^\d]*)(\d+)([^\d]*End_Day[^\d]*)(\d+)'
+                
+                def replace_aggressive(match):
+                    end_month = int(match.group(2))
+                    end_day = int(match.group(4))
+                    if end_month > 1:
+                        logger.info(f"   Aggressively shortening RunPeriod: End_Month {end_month} -> 1")
+                        return f"{match.group(1)}1{match.group(3)}31"
+                    return match.group(0)
+                
+                modified_content = re.sub(aggressive_pattern, replace_aggressive, idf_content)
+                
+                if modified_content != idf_content:
+                    logger.info("✅ IDF RunPeriod optimized (aggressive mode)")
+                    return modified_content
+                else:
+                    logger.warning("⚠️  Could not find RunPeriod to optimize - simulation may be slow")
+                    return idf_content
+                    
+        except Exception as e:
+            logger.warning(f"⚠️  Error optimizing IDF: {e}. Continuing with original IDF.")
+            return idf_content
+    
+    def read_request_simple(self, client_socket):
+        """Simple request reading with better handling and timeout"""
+        try:
+            # Set socket timeout to prevent hanging
+            client_socket.settimeout(30.0)  # 30 second timeout for reading
+            
             request = b''
             while True:
                 chunk = client_socket.recv(8192)
@@ -80,8 +171,15 @@ class RobustEnergyPlusAPI:
                                 body_start = header_end + 4
                                 expected_total = body_start + content_length
                                 
+                                # For very large requests, read in larger chunks
+                                chunk_size = 8192
+                                if content_length > 1000000:  # > 1MB
+                                    chunk_size = 32768  # 32KB chunks
+                                
                                 while len(request) < expected_total:
-                                    chunk = client_socket.recv(8192)
+                                    remaining = expected_total - len(request)
+                                    read_size = min(chunk_size, remaining)
+                                    chunk = client_socket.recv(read_size)
                                     if not chunk:
                                         break
                                     request += chunk
@@ -90,6 +188,9 @@ class RobustEnergyPlusAPI:
             
             return request.decode('utf-8', errors='ignore')
             
+        except socket.timeout:
+            logger.error(f"❌ Request read timeout")
+            return ""
         except Exception as e:
             logger.error(f"❌ Error reading request: {e}")
             return ""
@@ -104,6 +205,17 @@ class RobustEnergyPlusAPI:
             logger.info(f"📊 IDF size: {len(idf_content)} bytes")
             if weather_content:
                 logger.info(f"📊 Weather size: {len(weather_content)} bytes")
+            
+            # OPTIMIZE FOR RAILWAY FREE TIER: Shorten simulation period if needed
+            # Free tier has 60s timeout, so we run shorter periods (1 month) instead of full year
+            simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 50))
+            optimize_for_free_tier = simulation_timeout <= 60  # If timeout is 60s or less, optimize
+            
+            if optimize_for_free_tier:
+                logger.info("⚡ Optimizing IDF for Railway free tier (shortening simulation period)...")
+                logger.info("   (Converting full year simulations to 1 month for faster completion)")
+                idf_content = self.optimize_idf_for_fast_simulation(idf_content)
+                logger.info("✅ IDF optimized for fast simulation (1 month period)")
             
             # Ensure Output:SQLite is in IDF - use 'Simple' for EnergyPlus 24.2.0 compatibility
             # EnergyPlus 24.2.0 may not support SimpleAndTabular, use Simple instead
@@ -175,12 +287,22 @@ class RobustEnergyPlusAPI:
                 logger.info(f"🔧 Running EnergyPlus command...")
                 logger.info(f"📋 Command: {' '.join(cmd)}")
                 
-                # Run EnergyPlus
+                # Run EnergyPlus with configurable timeout
+                # For Railway free tier: Use 50s timeout with optimized IDF (1 month simulation)
+                # For Railway Pro: Can use 180s+ with full year simulations
+                # Set SIMULATION_TIMEOUT env var (default: 50s for free tier compatibility)
+                simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 50))
+                logger.info(f"⏱️  Simulation timeout set to: {simulation_timeout} seconds")
+                if simulation_timeout <= 60:
+                    logger.info(f"   (Free tier mode: Using optimized 1-month simulation period)")
+                else:
+                    logger.info(f"   (Pro tier mode: Full simulation, ensure Railway HTTP timeout >= {simulation_timeout}s)")
+                
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
-                    timeout=300  # 5 minutes timeout
+                    timeout=simulation_timeout
                 )
                 
                 logger.info(f"📊 EnergyPlus exit code: {result.returncode}")
@@ -237,7 +359,8 @@ class RobustEnergyPlusAPI:
                     return self.create_error_response(error_msg)
                     
         except subprocess.TimeoutExpired:
-            error_msg = "EnergyPlus simulation timed out (5 minutes)"
+            timeout_seconds = int(os.environ.get('SIMULATION_TIMEOUT', 50))
+            error_msg = f"EnergyPlus simulation timed out ({timeout_seconds} seconds). The IDF was automatically optimized for fast simulation, but still timed out. Solutions: (1) Further simplify the IDF model, (2) Increase SIMULATION_TIMEOUT env var if on Railway Pro, (3) Check if IDF has complex HVAC systems that can be simplified."
             logger.error(f"❌ {error_msg}")
             return self.create_error_response(error_msg)
         except Exception as e:
@@ -1881,6 +2004,10 @@ class RobustEnergyPlusAPI:
     def handle_simulate(self, client_socket, request_text):
         """Handle simulation request"""
         try:
+            # Set socket timeout to prevent Railway timeout issues
+            # Railway typically has 30-60s timeout, so we need to be careful
+            client_socket.settimeout(600.0)  # 10 minutes for entire request
+            
             # Extract JSON body
             body_start = request_text.find('\r\n\r\n') + 4
             body = request_text[body_start:]
@@ -1909,7 +2036,10 @@ class RobustEnergyPlusAPI:
             if measured_data:
                 logger.info(f"📊 Measured data provided: {measured_data.get('total_annual_kwh', 'N/A')} kWh")
             
-            # Run simulation
+            # For Railway, we need to send a keep-alive or process quickly
+            # Reduce simulation timeout to match Railway's limits better
+            # Run simulation with reduced timeout for Railway compatibility
+            logger.info("⚡ Starting simulation (Railway-optimized)...")
             result = self.run_energyplus_simulation(idf_content, weather_content)
             
             # Compare with measured data if provided
@@ -1918,11 +2048,19 @@ class RobustEnergyPlusAPI:
                 if comparison:
                     result.update(comparison)
             
-            # Send response
+            # Send response immediately after simulation
+            logger.info("📤 Sending response...")
             self.send_json_response(client_socket, result)
+            logger.info("✅ Response sent successfully")
             
+        except socket.timeout:
+            error_msg = "Request timed out - simulation took too long"
+            logger.error(f"❌ {error_msg}")
+            self.send_error_response(client_socket, error_msg)
         except Exception as e:
             logger.error(f"❌ Simulate error: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             self.send_error_response(client_socket, str(e))
     
     def send_json_response(self, client_socket, data):
@@ -1933,14 +2071,32 @@ class RobustEnergyPlusAPI:
             response += f"Content-Type: application/json\r\n"
             response += f"Content-Length: {len(json_data)}\r\n"
             response += f"Access-Control-Allow-Origin: *\r\n"
+            response += f"Connection: close\r\n"
             response += f"\r\n"
             response += json_data
             
-            client_socket.sendall(response.encode('utf-8'))
+            # Send response in chunks if large
+            response_bytes = response.encode('utf-8')
+            if len(response_bytes) > 100000:  # > 100KB
+                logger.info(f"📤 Sending large response ({len(response_bytes)} bytes) in chunks...")
+                chunk_size = 32768
+                for i in range(0, len(response_bytes), chunk_size):
+                    chunk = response_bytes[i:i+chunk_size]
+                    client_socket.sendall(chunk)
+                    logger.info(f"   Sent chunk {i//chunk_size + 1} ({len(chunk)} bytes)")
+            else:
+                client_socket.sendall(response_bytes)
+            
+            logger.info(f"✅ Response sent: {len(response_bytes)} bytes")
         except Exception as e:
             logger.error(f"❌ Send response error: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
         finally:
-            client_socket.close()
+            try:
+                client_socket.close()
+            except:
+                pass
     
     def send_error_response(self, client_socket, error_msg):
         """Send error HTTP response"""
