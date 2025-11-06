@@ -225,8 +225,8 @@ class RobustEnergyPlusAPI:
                 logger.info(f"📊 Weather size: {len(weather_content)} bytes")
             
             # OPTIMIZE FOR RAILWAY FREE TIER: Shorten simulation period if needed
-            # Free tier has 60s timeout, so we run shorter periods (1 month) instead of full year
-            simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 50))
+            # Free tier has 60s timeout, so we run shorter periods (2 weeks) instead of full year
+            simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 55))
             optimize_for_free_tier = simulation_timeout <= 60  # If timeout is 60s or less, optimize
             
             if optimize_for_free_tier:
@@ -306,10 +306,10 @@ class RobustEnergyPlusAPI:
                 logger.info(f"📋 Command: {' '.join(cmd)}")
                 
                 # Run EnergyPlus with configurable timeout
-                # For Railway free tier: Use 50s timeout with optimized IDF (1 month simulation)
+                # For Railway free tier: Use 55s timeout with optimized IDF (2 week simulation)
                 # For Railway Pro: Can use 180s+ with full year simulations
-                # Set SIMULATION_TIMEOUT env var (default: 50s for free tier compatibility)
-                simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 50))
+                # Set SIMULATION_TIMEOUT env var (default: 55s for free tier compatibility, within 60s HTTP limit)
+                simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 55))
                 logger.info(f"⏱️  Simulation timeout set to: {simulation_timeout} seconds")
                 if simulation_timeout <= 60:
                     logger.info(f"   (Free tier mode: Using optimized 2-week simulation period)")
@@ -377,7 +377,7 @@ class RobustEnergyPlusAPI:
                     return self.create_error_response(error_msg)
                     
         except subprocess.TimeoutExpired:
-            timeout_seconds = int(os.environ.get('SIMULATION_TIMEOUT', 50))
+            timeout_seconds = int(os.environ.get('SIMULATION_TIMEOUT', 55))
             error_msg = f"EnergyPlus simulation timed out ({timeout_seconds} seconds). The IDF was automatically optimized for fast simulation, but still timed out. Solutions: (1) Further simplify the IDF model, (2) Increase SIMULATION_TIMEOUT env var if on Railway Pro, (3) Check if IDF has complex HVAC systems that can be simplified."
             logger.error(f"❌ {error_msg}")
             return self.create_error_response(error_msg)
