@@ -1794,11 +1794,26 @@ class RobustEnergyPlusAPI:
         output_info = {}
         
         try:
-            # 1. Full error file content
+            # 1. Full error file content (limit to 100KB to avoid response size issues)
             if err_file and os.path.exists(err_file):
-                with open(err_file, 'r') as f:
-                    output_info['error_file_content'] = f.read()
-                logger.info(f"✅ Captured full error file content ({len(output_info['error_file_content'])} chars)")
+                try:
+                    with open(err_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        error_content = f.read()
+                    # Limit size to prevent huge responses (keep last 100KB if too large)
+                    max_error_size = 100 * 1024  # 100KB
+                    if len(error_content) > max_error_size:
+                        logger.warning(f"⚠️  Error file is large ({len(error_content)} chars), truncating to last {max_error_size} chars")
+                        error_content = error_content[-max_error_size:]
+                        output_info['error_file_content'] = error_content
+                        output_info['error_file_truncated'] = True
+                        output_info['error_file_original_size'] = len(f.read()) if os.path.exists(err_file) else 0
+                    else:
+                        output_info['error_file_content'] = error_content
+                        output_info['error_file_truncated'] = False
+                    logger.info(f"✅ Captured error file content ({len(output_info['error_file_content'])} chars)")
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not read error file: {e}")
+                    output_info['error_file_content'] = f"Error reading file: {str(e)}"
             
             # 2. List of generated output files
             output_files = []
