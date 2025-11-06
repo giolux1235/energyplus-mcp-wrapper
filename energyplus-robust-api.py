@@ -1583,6 +1583,49 @@ class RobustEnergyPlusAPI:
                 except Exception as e:
                     logger.warning(f"⚠️  Strategy 3 failed: {e}")
             
+            # VALIDATION: Check if values are reasonable for simulation period
+            # Get simulation period (default to 7 days if not set)
+            simulation_days = getattr(self, 'current_simulation_days', 7)
+            
+            if simulation_days > 0 and energy_data.get('total_energy_consumption', 0) > 0:
+                total_energy = energy_data['total_energy_consumption']
+                building_area = energy_data.get('building_area', 0)
+                
+                # Expected energy range for simulation period
+                # Typical office: 100-300 kWh/m²/year
+                # For simulation period: (period_days / 365) * (100-300) * area
+                if building_area > 0:
+                    min_expected = (simulation_days / 365.0) * 100 * building_area
+                    max_expected = (simulation_days / 365.0) * 300 * building_area
+                    
+                    # If value is more than 3x max expected, likely wrong (annual total or unit issue)
+                    if total_energy > max_expected * 3:
+                        logger.warning(f"⚠️  Energy value ({total_energy:.2f} kWh) seems too high for {simulation_days}-day simulation")
+                        logger.warning(f"   Expected range: {min_expected:.0f} - {max_expected:.0f} kWh")
+                        logger.warning(f"   Value is {total_energy/max_expected:.1f}x higher than expected max")
+                        logger.warning(f"   Possible issues: Annual totals instead of period totals, or unit conversion error")
+                        
+                        # If value is suspiciously high (like annual), try dividing by (365/simulation_days)
+                        if total_energy > max_expected * 10:
+                            correction_factor = simulation_days / 365.0
+                            corrected_total = total_energy * correction_factor
+                            logger.warning(f"   Attempting correction: {total_energy:.2f} * {correction_factor:.4f} = {corrected_total:.2f} kWh")
+                            
+                            # Only apply correction if it brings value into reasonable range
+                            if min_expected <= corrected_total <= max_expected * 2:
+                                logger.info(f"   ✅ Applying correction - value was likely annual total")
+                                energy_data['total_energy_consumption'] = round(corrected_total, 2)
+                                
+                                # Also correct breakdown if present
+                                for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy', 'fans_energy', 'pumps_energy']:
+                                    if key in energy_data and energy_data[key] > 0:
+                                        energy_data[key] = round(energy_data[key] * correction_factor, 2)
+                                
+                                if 'electricity_kwh' in energy_data:
+                                    energy_data['electricity_kwh'] = round(energy_data['electricity_kwh'] * correction_factor, 2)
+                                if 'gas_kwh' in energy_data:
+                                    energy_data['gas_kwh'] = round(energy_data['gas_kwh'] * correction_factor, 2)
+            
             # Round all energy values
             for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy', 'fans_energy', 'pumps_energy']:
                 if key in energy_data:
