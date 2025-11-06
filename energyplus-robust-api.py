@@ -1303,6 +1303,46 @@ class RobustEnergyPlusAPI:
                 
                 meter_results = cursor.fetchall()
                 logger.info(f"📊 Strategy 1 (ReportMeterData): Found {len(meter_results)} facility meters")
+                
+                # Also query for breakdown meters (heating, cooling, lighting, etc.)
+                try:
+                    # Query for all meters, not just facility-level
+                    cursor.execute("""
+                        SELECT 
+                            COALESCE(rmdd.VariableName, rmdd.KeyValue, 'Unknown') as MeterName,
+                            rmdd.ReportingFrequency,
+                            rmdd.VariableUnits,
+                            rmd.VariableValue as TotalValue
+                        FROM ReportMeterData rmd
+                        JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                        JOIN (
+                            SELECT 
+                                rmdd2.ReportMeterDataDictionaryIndex,
+                                MAX(rmd2.TimeIndex) as MaxTimeIndex
+                            FROM ReportMeterData rmd2
+                            JOIN ReportMeterDataDictionary rmdd2 ON rmd2.ReportMeterDataDictionaryIndex = rmdd2.ReportMeterDataDictionaryIndex
+                            WHERE (rmdd2.ReportingFrequency LIKE '%Run Period%' OR rmdd2.ReportingFrequency LIKE '%RunPeriod%')
+                            GROUP BY rmdd2.ReportMeterDataDictionaryIndex
+                        ) max_times ON rmd.ReportMeterDataDictionaryIndex = max_times.ReportMeterDataDictionaryIndex
+                            AND rmd.TimeIndex = max_times.MaxTimeIndex
+                        WHERE (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
+                    """)
+                    all_meters = cursor.fetchall()
+                    logger.info(f"📊 Found {len(all_meters)} total meters (including breakdown)")
+                    if all_meters:
+                        for result in all_meters[:20]:  # Log first 20
+                            if len(result) >= 4:
+                                name, freq, units, value = result[0], result[1], result[2], result[3]
+                                if units and units.upper() in ['J', 'JOULES']:
+                                    value_kwh = value / 3600000
+                                elif units and units.upper() in ['KWH']:
+                                    value_kwh = value
+                                else:
+                                    value_kwh = value / 3600000
+                                logger.info(f"   All meters: {name} | Units: {units} | Value: {value_kwh:.2f} kWh")
+                except Exception as e:
+                    logger.warning(f"⚠️  Could not query all meters: {e}")
+                
                 if meter_results:
                     for result in meter_results:
                         if len(result) >= 4:
@@ -1314,11 +1354,11 @@ class RobustEnergyPlusAPI:
                                 value_kwh = value
                             else:
                                 value_kwh = value / 3600000  # Default assume J
-                            logger.info(f"   Meter: {name} | Units: {units} | Freq: {freq} | Value: {value_kwh:.2f} kWh")
+                            logger.info(f"   Facility meter: {name} | Units: {units} | Freq: {freq} | Value: {value_kwh:.2f} kWh")
                         else:
                             name, value = result[0], result[1] if len(result) > 1 else result[-1]
                             value_kwh = value / 3600000  # Default assume J
-                        logger.info(f"   Meter: {name} = {value_kwh:.2f} kWh")
+                        logger.info(f"   Facility meter: {name} = {value_kwh:.2f} kWh")
                 
                 electricity_kwh = 0
                 gas_kwh = 0
