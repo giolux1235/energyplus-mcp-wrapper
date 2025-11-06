@@ -10,9 +10,13 @@ import socket
 import threading
 import subprocess
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import re
+import uuid
+import shutil
+import time
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +45,16 @@ class RobustEnergyPlusAPI:
         self.energyplus_exe = os.environ.get('ENERGYPLUS_EXE', default_exe)
         self.energyplus_idd = os.environ.get('ENERGYPLUS_IDD', default_idd)
         
+        # File storage configuration
+        self.storage_dir = os.environ.get('OUTPUT_STORAGE_DIR', '/tmp/energyplus_outputs')
+        self.file_retention_hours = int(os.environ.get('FILE_RETENTION_HOURS', '24'))
+        os.makedirs(self.storage_dir, exist_ok=True)
+        logger.info(f"📁 Output files storage: {self.storage_dir}")
+        logger.info(f"⏰ File retention: {self.file_retention_hours} hours")
+        
+        # Base URL for file downloads (will be set from request)
+        self.base_url = os.environ.get('BASE_URL', '')
+        
         logger.info(f"🚀 Robust EnergyPlus API v{self.version} starting...")
         logger.info(f"📊 EnergyPlus EXE: {self.energyplus_exe}")
         logger.info(f"📊 EnergyPlus IDD: {self.energyplus_idd}")
@@ -52,6 +66,9 @@ class RobustEnergyPlusAPI:
             logger.warning("⚠️  Starting service without EnergyPlus - simulations will fail")
         else:
             logger.info("✅ Service ready with EnergyPlus available")
+        
+        # Start cleanup thread
+        self.start_cleanup_thread()
     
     def test_energyplus(self):
         """Test EnergyPlus installation - graceful failure"""
@@ -77,6 +94,70 @@ class RobustEnergyPlusAPI:
             logger.warning(f"⚠️  EnergyPlus test error: {e}")
             logger.warning("   Service will start but simulations will fail")
             return False
+    
+    def start_cleanup_thread(self):
+        """Start background thread to clean up old files"""
+        def cleanup_old_files():
+            while True:
+                try:
+                    time.sleep(3600)  # Run every hour
+                    self.cleanup_old_files()
+                except Exception as e:
+                    logger.error(f"❌ Cleanup thread error: {e}")
+        
+        cleanup_thread = threading.Thread(target=cleanup_old_files, daemon=True)
+        cleanup_thread.start()
+        logger.info("🧹 Cleanup thread started")
+    
+    def cleanup_old_files(self):
+        """Remove files older than retention period"""
+        try:
+            cutoff_time = time.time() - (self.file_retention_hours * 3600)
+            removed_count = 0
+            removed_size = 0
+            
+            for sim_dir in Path(self.storage_dir).iterdir():
+                if sim_dir.is_dir():
+                    # Check if directory is older than retention period
+                    if sim_dir.stat().st_mtime < cutoff_time:
+                        # Calculate size before deletion
+                        dir_size = sum(f.stat().st_size for f in sim_dir.rglob('*') if f.is_file())
+                        shutil.rmtree(sim_dir)
+                        removed_count += 1
+                        removed_size += dir_size
+                        logger.info(f"🧹 Removed old simulation files: {sim_dir.name} ({dir_size / 1024 / 1024:.2f} MB)")
+            
+            if removed_count > 0:
+                logger.info(f"🧹 Cleanup complete: Removed {removed_count} directories ({removed_size / 1024 / 1024:.2f} MB)")
+        except Exception as e:
+            logger.error(f"❌ Cleanup error: {e}")
+    
+    def save_output_files(self, output_dir, simulation_id):
+        """Save output files to persistent storage"""
+        try:
+            sim_storage_dir = os.path.join(self.storage_dir, simulation_id)
+            os.makedirs(sim_storage_dir, exist_ok=True)
+            
+            # Copy all files from output_dir to storage
+            file_urls = {}
+            for file_name in os.listdir(output_dir):
+                src_path = os.path.join(output_dir, file_name)
+                if os.path.isfile(src_path):
+                    dst_path = os.path.join(sim_storage_dir, file_name)
+                    shutil.copy2(src_path, dst_path)
+                    file_size = os.path.getsize(dst_path)
+                    file_urls[file_name] = {
+                        "url": f"/download/{simulation_id}/{file_name}",
+                        "size_bytes": file_size,
+                        "size_mb": round(file_size / 1024 / 1024, 2)
+                    }
+                    logger.info(f"💾 Saved file: {file_name} ({file_size / 1024 / 1024:.2f} MB)")
+            
+            logger.info(f"✅ Saved {len(file_urls)} files for simulation {simulation_id}")
+            return file_urls
+        except Exception as e:
+            logger.error(f"❌ Error saving files: {e}")
+            return {}
     
     def get_simulation_period_days(self, idf_content):
         """Extract simulation period in days from IDF"""
@@ -425,9 +506,24 @@ class RobustEnergyPlusAPI:
                         except Exception as e:
                             logger.warning(f"   Could not read error file: {e}")
                 
+                # Generate unique simulation ID
+                simulation_id = str(uuid.uuid4())
+                logger.info(f"🆔 Simulation ID: {simulation_id}")
+                
+                # Save output files to persistent storage BEFORE parsing
+                file_urls = {}
+                if output_files:
+                    file_urls = self.save_output_files(output_dir, simulation_id)
+                
                 # Parse results - even if exit code != 0, we might have partial results
                 if output_files:
-                    return self.parse_energyplus_output(output_dir, result.returncode, result.stderr)
+                    parsed_response = self.parse_energyplus_output(output_dir, result.returncode, result.stderr)
+                    # Add file URLs to response
+                    parsed_response['simulation_id'] = simulation_id
+                    parsed_response['output_files_download'] = file_urls
+                    parsed_response['files_available_until'] = (datetime.now() + timedelta(hours=self.file_retention_hours)).isoformat()
+                    parsed_response['download_base_url'] = self.base_url or f"http://{self.host}:{self.port}"
+                    return parsed_response
                 else:
                     error_msg = f"EnergyPlus generated no output files. Exit code: {result.returncode}"
                     if result.stderr:
@@ -2234,9 +2330,24 @@ class RobustEnergyPlusAPI:
                 self.send_error_response(client_socket, "Empty request")
                 return
             
+            # Extract base URL from request for file downloads
+            if 'Host:' in request_text:
+                for line in request_text.split('\r\n'):
+                    if line.startswith('Host:'):
+                        host = line.split(':', 1)[1].strip()
+                        # Try to detect if HTTPS (in production) or HTTP (local)
+                        protocol = 'https' if 'railway' in host or 'heroku' in host else 'http'
+                        self.base_url = f"{protocol}://{host}"
+                        break
+            
             # Check if health check
             if 'GET /health' in request_text or 'GET /healthz' in request_text:
                 self.handle_health(client_socket)
+                return
+            
+            # Check if download endpoint
+            if 'GET /download/' in request_text:
+                self.handle_download(client_socket, request_text)
                 return
             
             # Check if simulate endpoint
@@ -2262,6 +2373,87 @@ class RobustEnergyPlusAPI:
             "timestamp": datetime.now().isoformat()
         }
         self.send_json_response(client_socket, response)
+    
+    def handle_download(self, client_socket, request_text):
+        """Handle file download request"""
+        try:
+            # Extract path from request: GET /download/{simulation_id}/{filename}
+            path_start = request_text.find('GET /download/')
+            if path_start == -1:
+                self.send_error_response(client_socket, "Invalid download path")
+                return
+            
+            path_line = request_text[path_start:].split('\r\n')[0]
+            path = path_line.split(' ')[1]  # GET /download/...
+            parts = path.split('/')
+            
+            if len(parts) < 4:  # /download/{sim_id}/{filename}
+                self.send_error_response(client_socket, "Invalid download path format")
+                return
+            
+            simulation_id = parts[2]
+            filename = '/'.join(parts[3:])  # Handle subdirectories if any
+            
+            # Security: prevent directory traversal
+            if '..' in filename or '..' in simulation_id:
+                self.send_error_response(client_socket, "Invalid path")
+                return
+            
+            file_path = os.path.join(self.storage_dir, simulation_id, filename)
+            
+            if not os.path.exists(file_path) or not os.path.isfile(file_path):
+                self.send_error_response(client_socket, f"File not found: {filename}")
+                return
+            
+            # Check if file is within retention period
+            file_age_hours = (time.time() - os.path.getmtime(file_path)) / 3600
+            if file_age_hours > self.file_retention_hours:
+                self.send_error_response(client_socket, f"File expired (retention: {self.file_retention_hours} hours)")
+                return
+            
+            # Determine content type
+            content_type = 'application/octet-stream'
+            if filename.endswith('.html') or filename.endswith('.htm'):
+                content_type = 'text/html'
+            elif filename.endswith('.csv'):
+                content_type = 'text/csv'
+            elif filename.endswith('.json'):
+                content_type = 'application/json'
+            elif filename.endswith('.sql'):
+                content_type = 'application/x-sqlite3'
+            elif filename.endswith('.txt') or filename.endswith('.err'):
+                content_type = 'text/plain'
+            elif filename.endswith('.xml'):
+                content_type = 'application/xml'
+            
+            # Read file and send
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+            
+            file_size = len(file_content)
+            response = f"HTTP/1.1 200 OK\r\n"
+            response += f"Content-Type: {content_type}\r\n"
+            response += f"Content-Length: {file_size}\r\n"
+            response += f"Content-Disposition: attachment; filename=\"{filename}\"\r\n"
+            response += f"Access-Control-Allow-Origin: *\r\n"
+            response += f"Connection: close\r\n"
+            response += f"\r\n"
+            
+            # Send headers
+            client_socket.sendall(response.encode('utf-8'))
+            
+            # Send file content in chunks
+            chunk_size = 65536  # 64KB chunks
+            for i in range(0, file_size, chunk_size):
+                chunk = file_content[i:i+chunk_size]
+                client_socket.sendall(chunk)
+            
+            logger.info(f"📥 Served file: {filename} ({file_size / 1024 / 1024:.2f} MB) for simulation {simulation_id}")
+            client_socket.close()
+            
+        except Exception as e:
+            logger.error(f"❌ Download error: {e}")
+            self.send_error_response(client_socket, f"Download error: {str(e)}")
     
     def handle_simulate(self, client_socket, request_text):
         """Handle simulation request"""
