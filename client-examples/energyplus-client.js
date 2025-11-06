@@ -115,7 +115,7 @@ class EnergyPlusClient {
 // Usage examples
 async function example() {
   // Initialize client
-  const mcpUrl = process.env.MCP_SERVER_URL || 'https://your-app-name.railway.app';
+  const mcpUrl = process.env.MCP_SERVER_URL || 'https://web-production-1d1be.up.railway.app';
   const client = new EnergyPlusClient(mcpUrl);
 
   try {

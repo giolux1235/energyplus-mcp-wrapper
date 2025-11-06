@@ -18,7 +18,7 @@ class EnergyPlusClient:
         Args:
             mcp_server_url: URL of the MCP server (defaults to environment variable)
         """
-        self.base_url = mcp_server_url or os.getenv('MCP_SERVER_URL', 'https://your-app-name.railway.app')
+        self.base_url = mcp_server_url or os.getenv('MCP_SERVER_URL', 'https://web-production-1d1be.up.railway.app')
         if not self.base_url.startswith('http'):
             self.base_url = f'https://{self.base_url}'
     
