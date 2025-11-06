@@ -29,10 +29,14 @@ class RobustEnergyPlusAPI:
         default_exe = '/usr/local/bin/energyplus'
         if not os.path.exists(default_exe):
             default_exe = '/usr/local/EnergyPlus-25-1-0/energyplus'
+        if not os.path.exists(default_exe):
+            default_exe = '/usr/local/EnergyPlus-24-2-0/energyplus'
         
         default_idd = '/usr/local/bin/Energy+.idd'
         if not os.path.exists(default_idd):
             default_idd = '/usr/local/EnergyPlus-25-1-0/Energy+.idd'
+        if not os.path.exists(default_idd):
+            default_idd = '/usr/local/EnergyPlus-24-2-0/Energy+.idd'
         
         self.energyplus_exe = os.environ.get('ENERGYPLUS_EXE', default_exe)
         self.energyplus_idd = os.environ.get('ENERGYPLUS_IDD', default_idd)
@@ -101,6 +105,43 @@ class RobustEnergyPlusAPI:
             if weather_content:
                 logger.info(f"📊 Weather size: {len(weather_content)} bytes")
             
+            # Ensure Output:SQLite is in IDF - use 'Simple' for EnergyPlus 24.2.0 compatibility
+            # EnergyPlus 24.2.0 may not support SimpleAndTabular, use Simple instead
+            if 'Output:SQLite' not in idf_content:
+                logger.warning("⚠️  Output:SQLite not found in IDF, adding it...")
+                # Add Output:SQLite - use Simple for better compatibility
+                idf_content += "\n\nOutput:SQLite,\n    Simple;        !- Option Type\n"
+                logger.info("✅ Added Output:SQLite to IDF with Simple option")
+            else:
+                logger.info("✅ Output:SQLite found in IDF")
+                # Check if it has a valid option type
+                import re
+                sqlite_match = re.search(r'Output:SQLite,\s*\n\s*([^;!]+)', idf_content)
+                if sqlite_match:
+                    option_type = sqlite_match.group(1).strip()
+                    logger.info(f"   Current option type: '{option_type}'")
+                    # Ensure it's Simple or SimpleAndTabular
+                    if 'Simple' not in option_type and 'Tabular' not in option_type:
+                        logger.warning(f"⚠️  Output:SQLite has unusual option type '{option_type}', changing to Simple...")
+                        idf_content = re.sub(
+                            r'Output:SQLite,\s*\n\s*[^;!]+;',
+                            'Output:SQLite,\n    Simple;        !- Option Type',
+                            idf_content
+                        )
+                        logger.info("✅ Updated Output:SQLite to use Simple option")
+                    elif 'SimpleAndTabular' in option_type:
+                        # For EnergyPlus 24.2.0, SimpleAndTabular may not work - change to Simple
+                        logger.warning(f"   ⚠️  Output:SQLite uses SimpleAndTabular, but EnergyPlus 24.2.0 may not support it")
+                        logger.info(f"   Changing to 'Simple' for compatibility...")
+                        idf_content = re.sub(
+                            r'Output:SQLite,\s*\n\s*SimpleAndTabular;',
+                            'Output:SQLite,\n    Simple;        !- Option Type',
+                            idf_content
+                        )
+                        logger.info("✅ Changed Output:SQLite from SimpleAndTabular to Simple")
+                else:
+                    logger.warning("⚠️  Could not parse Output:SQLite option type")
+            
             # Create temporary files
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Write IDF file
@@ -149,6 +190,40 @@ class RobustEnergyPlusAPI:
                 # Check output directory
                 output_files = os.listdir(output_dir)
                 logger.info(f"📁 Output files generated: {output_files}")
+                
+                # Check for SQLite files specifically - EnergyPlus generates eplusout.sql
+                sqlite_files = [f for f in output_files if (f.endswith('.sql') and ('eplusout' in f.lower() or 'sqlite' in f.lower())) 
+                                or 'sqlite' in f.lower() or f.endswith('.db')]
+                if sqlite_files:
+                    logger.info(f"✅ SQLite files found: {sqlite_files}")
+                    for sql_file in sqlite_files:
+                        sql_path = os.path.join(output_dir, sql_file)
+                        if os.path.exists(sql_path):
+                            size = os.path.getsize(sql_path)
+                            logger.info(f"   - {sql_file}: {size:,} bytes")
+                else:
+                    logger.warning(f"⚠️  No SQLite files found in output directory")
+                    logger.warning(f"   Expected: eplusout.sql (or similar)")
+                    logger.warning(f"   All output files: {output_files[:20]}")
+                    
+                    # Check error file for SQLite warnings
+                    err_files = [f for f in output_files if f.endswith('.err')]
+                    if err_files:
+                        err_path = os.path.join(output_dir, err_files[0])
+                        try:
+                            with open(err_path, 'r') as f:
+                                err_content = f.read()
+                                if 'SQLite' in err_content or 'sqlite' in err_content.lower():
+                                    sqlite_warnings = [line for line in err_content.split('\n') if 'sqlite' in line.lower() or 'SQLite' in line]
+                                    if sqlite_warnings:
+                                        logger.warning(f"   SQLite-related messages in error file:")
+                                        for warning in sqlite_warnings[:5]:
+                                            logger.warning(f"      {warning}")
+                                # Check if SimpleAndTabular caused issues
+                                if 'SimpleAndTabular' in idf_content and ('invalid' in err_content.lower() or 'error' in err_content.lower()):
+                                    logger.warning(f"   ⚠️  SimpleAndTabular may not be supported - consider using 'Simple' instead")
+                        except Exception as e:
+                            logger.warning(f"   Could not read error file: {e}")
                 
                 # Parse results - even if exit code != 0, we might have partial results
                 if output_files:
@@ -322,16 +397,36 @@ class RobustEnergyPlusAPI:
                             energy_data[key] = value
                     logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
-        # Try MTR files (meter files) - only if HTML didn't provide complete data
-        if energy_data.get('total_energy_consumption', 0) == 0:
-            for file in output_files:
-                if file.endswith('.mtr'):
-                    mtr_path = os.path.join(output_dir, file)
-                    logger.info(f"📊 Parsing MTR: {file}")
-                    data = self.parse_energyplus_mtr(mtr_path)
-                    if data:
-                        energy_data.update(data)
-                        logger.info(f"✅ Got data from {file}: {list(data.keys())}")
+        # FIX 1: Always try MTR files for breakdown, even if HTML provided total
+        # HTML might have total but incomplete/zero breakdown for large buildings
+        for file in output_files:
+            if file.endswith('.mtr'):
+                mtr_path = os.path.join(output_dir, file)
+                logger.info(f"📊 Parsing MTR for breakdown: {file}")
+                data = self.parse_energyplus_mtr(mtr_path)
+                if data:
+                    # Always update breakdown fields if MTR has better data
+                    breakdown_fields = ['heating_energy', 'cooling_energy', 'lighting_energy', 
+                                       'equipment_energy', 'fans_energy', 'pumps_energy']
+                    for field in breakdown_fields:
+                        if field in data and data[field] > 0:
+                            current_value = energy_data.get(field, 0)
+                            if data[field] > current_value:  # Use larger value (more complete)
+                                energy_data[field] = data[field]
+                                logger.info(f"   Updated {field}: {data[field]:.2f} kWh")
+                    
+                    # Update total if facility-level total is larger (more reliable)
+                    if 'total_energy_consumption' in data:
+                        facility_total = data['total_energy_consumption']
+                        current_total = energy_data.get('total_energy_consumption', 0)
+                        if facility_total > current_total * 1.1:  # Only if significantly larger (10% threshold)
+                            energy_data['total_energy_consumption'] = facility_total
+                            logger.info(f"✅ Updated total from facility-level meter: {facility_total:.2f} kWh (was {current_total:.2f} kWh)")
+                        elif facility_total > 0 and current_total == 0:
+                            energy_data['total_energy_consumption'] = facility_total
+                            logger.info(f"✅ Set total from facility-level meter: {facility_total:.2f} kWh")
+                    
+                    logger.info(f"✅ MTR data merged: breakdown updated, total may be updated")
         
         # Try CSV files - as fallback for energy, but always try for building area
         for file in output_files:
@@ -360,18 +455,83 @@ class RobustEnergyPlusAPI:
                         energy_data.update(data)
                         logger.info(f"✅ Got data from {file}: {list(data.keys())}")
         
-        # Try SQLite database - when CSV is missing or data not found
-        if energy_data.get('total_energy_consumption', 0) == 0:
-            for file in output_files:
-                if file.endswith('.sqlite') or file.endswith('.sqlite3') or file.endswith('.db'):
-                    sqlite_path = os.path.join(output_dir, file)
-                    logger.info(f"📊 Parsing SQLite: {file}")
-                    data = self.extract_energy_from_sqlite(sqlite_path)
-                    if data and data.get('total_energy_consumption', 0) > 0:
-                        energy_data.update(data)
-                        extraction_method = "sqlite"
-                        logger.info(f"✅ Got data from SQLite {file}: {list(data.keys())}")
-                        break  # Stop after first successful extraction
+        # FIX: Always check SQLite for facility-level meters (most reliable source)
+        # Even if HTML/CSV provided a total, SQLite may have the complete facility-level meters
+        # EnergyPlus generates SQLite as eplusout.sql (not .sqlite extension)
+        current_total = energy_data.get('total_energy_consumption', 0)
+        
+        # Look for SQLite files - check for .sql files first (most common)
+        sqlite_files_found = []
+        for file in output_files:
+            if (file.endswith('.sqlite') or file.endswith('.sqlite3') or file.endswith('.db') or 
+                (file.endswith('.sql') and ('eplusout' in file.lower() or 'sqlite' in file.lower()))):
+                sqlite_files_found.append(file)
+        
+        if sqlite_files_found:
+            logger.info(f"📊 Found {len(sqlite_files_found)} SQLite file(s): {sqlite_files_found}")
+        
+        for file in sqlite_files_found:
+            sqlite_path = os.path.join(output_dir, file)
+            logger.info(f"📊 Parsing SQLite for facility-level meters: {file}")
+            
+            # Check if file exists and has content
+            if not os.path.exists(sqlite_path):
+                logger.warning(f"⚠️  SQLite file not found: {sqlite_path}")
+                continue
+            
+            file_size = os.path.getsize(sqlite_path)
+            logger.info(f"   File size: {file_size:,} bytes")
+            
+            sqlite_data = self.extract_energy_from_sqlite(sqlite_path)
+            if sqlite_data and sqlite_data.get('total_energy_consumption', 0) > 0:
+                sqlite_total = sqlite_data.get('total_energy_consumption', 0)
+                
+                # Prioritize SQLite if it has facility-level meters
+                # HTML/CSV is known to be incomplete (76% too low), so trust SQLite more
+                # However, if SQLite is extremely high (>100x), it's likely wrong
+                ratio = sqlite_total / current_total if current_total > 0 else float('inf')
+                
+                if sqlite_total > current_total * 1.2 and ratio < 100:
+                    # SQLite is higher and reasonable - use it
+                    logger.info(f"✅ SQLite facility meters found: {sqlite_total:.2f} kWh (vs {current_total:.2f} kWh from HTML/CSV)")
+                    logger.info(f"   Ratio: {ratio:.1f}x - Using SQLite (HTML/CSV known to be incomplete)")
+                    energy_data.update(sqlite_data)
+                    extraction_method = "sqlite"
+                    logger.info(f"✅ Updated energy data from SQLite: {list(sqlite_data.keys())}")
+                elif ratio >= 100:
+                    logger.warning(f"⚠️  SQLite values are {ratio:.1f}x higher than HTML/CSV (likely error)")
+                    logger.warning(f"   SQLite: {sqlite_total:.2f} kWh, HTML/CSV: {current_total:.2f} kWh")
+                    logger.warning(f"   SQLite values seem unreasonably high, keeping HTML/CSV values")
+                    logger.warning(f"   This suggests a data format issue in SQLite extraction")
+                elif sqlite_total > 0 and current_total == 0:
+                    # No HTML/CSV data, use SQLite
+                    logger.info(f"✅ No HTML/CSV data, using SQLite: {sqlite_total:.2f} kWh")
+                    energy_data.update(sqlite_data)
+                    extraction_method = "sqlite"
+                    logger.info(f"✅ Updated energy data from SQLite: {list(sqlite_data.keys())}")
+                elif sqlite_total > current_total * 0.8 and ratio < 2:
+                    # SQLite is similar or slightly higher - use SQLite (more reliable)
+                    logger.info(f"✅ SQLite values similar to HTML/CSV, using SQLite (more reliable)")
+                    energy_data.update(sqlite_data)
+                    extraction_method = "sqlite"
+                    logger.info(f"✅ Updated energy data from SQLite")
+                elif current_total == 0:
+                    # No total yet, use SQLite
+                    energy_data.update(sqlite_data)
+                    extraction_method = "sqlite"
+                    logger.info(f"✅ Got data from SQLite {file}: {list(sqlite_data.keys())}")
+                else:
+                    # SQLite has data but current total is similar or higher
+                    # Still merge breakdown if SQLite has better breakdown
+                    logger.info(f"📊 SQLite total ({sqlite_total:.2f} kWh) similar to current ({current_total:.2f} kWh)")
+                    logger.info(f"   Merging SQLite breakdown data if available")
+                    breakdown_fields = ['heating_energy', 'cooling_energy', 'lighting_energy', 
+                                      'equipment_energy', 'fans_energy', 'pumps_energy']
+                    for field in breakdown_fields:
+                        if field in sqlite_data and sqlite_data[field] > energy_data.get(field, 0):
+                            energy_data[field] = sqlite_data[field]
+                            logger.info(f"   Updated {field} from SQLite: {sqlite_data[field]:.2f} kWh")
+            break  # Stop after first SQLite file
         
         # Store extraction method for reporting
         energy_data['_extraction_method'] = extraction_method
@@ -443,7 +603,10 @@ class RobustEnergyPlusAPI:
                 logger.info(f"   {meter}: {total_kwh:.2f} kWh")
             
             # Step 3: Categorize and convert to kWh
+            # FIX 2: Prioritize facility-level meters over breakdown
             total = 0
+            facility_total = 0  # Track facility-level total separately
+            facility_gas = 0
             heating = 0
             cooling = 0
             lighting = 0
@@ -469,18 +632,40 @@ class RobustEnergyPlusAPI:
                 elif 'pumps:electricity' in meter_name:
                     pumps += value
                 elif 'electricity:facility' in meter_name or 'electricitynet:facility' in meter_name:
-                    # Use facility total only if we don't have breakdown
-                    if total == 0:
-                        total = value
-                elif 'naturalgas:facility' in meter_name:
-                    # Add gas to heating if not already counted
-                    if heating == 0:
-                        heating += value
+                    # Facility-level total is most reliable - capture it
+                    facility_total = max(facility_total, value)
+                    logger.info(f"   Found facility-level electricity meter: {value:.2f} kWh")
+                elif 'naturalgas:facility' in meter_name or 'gas:facility' in meter_name:
+                    # Capture facility-level gas separately
+                    facility_gas = max(facility_gas, value)
+                    logger.info(f"   Found facility-level gas meter: {value:.2f} kWh")
             
-            # Calculate total from breakdown if available
-            breakdown_total = heating + cooling + lighting + equipment + fans + pumps
-            if breakdown_total > 0:
-                total = breakdown_total
+            # FIX 2: Use facility-level total as primary source (most reliable)
+            # Breakdown is secondary and may be incomplete
+            if facility_total > 0:
+                total = facility_total + facility_gas  # Add gas if present
+                logger.info(f"✅ Using facility-level total: {total:.2f} kWh (electricity: {facility_total:.2f}, gas: {facility_gas:.2f})")
+            else:
+                # Fallback to breakdown total if no facility-level meter found
+                breakdown_total = heating + cooling + lighting + equipment + fans + pumps
+                if breakdown_total > 0:
+                    total = breakdown_total
+                    logger.info(f"✅ Using breakdown total: {total:.2f} kWh (no facility-level meter found)")
+                
+                # Warn if breakdown is incomplete (common for large buildings)
+                if total > 0:
+                    logger.warning(f"⚠️  No facility-level meter found - breakdown may be incomplete")
+            
+            # Validation: Check if breakdown matches facility total (if both exist)
+            if facility_total > 0:
+                breakdown_total = heating + cooling + lighting + equipment + fans + pumps
+                if breakdown_total > 0:
+                    diff = abs(facility_total - breakdown_total)
+                    diff_pct = (diff / facility_total * 100) if facility_total > 0 else 0
+                    if diff_pct > 10:
+                        logger.warning(f"⚠️  Breakdown total ({breakdown_total:.2f} kWh) differs from facility total ({facility_total:.2f} kWh) by {diff_pct:.1f}%")
+                        logger.warning(f"   This suggests some energy categories are missing from breakdown")
+                        logger.warning(f"   Using facility-level total ({facility_total + facility_gas:.2f} kWh) as primary source")
             
             energy_data = {}
             if total > 0:
@@ -533,39 +718,59 @@ class RobustEnergyPlusAPI:
                 if not line.strip():
                     continue
                 
-                # Extract building area - look for "Total Building Area" or "Area [m2]"
+                # Extract building area - look for "Total Building Area" specifically
                 line_lower = line.lower()
                 parts = line.split(',')
                 
-                # Check for building area header (format: ",,Area [m2],...")
-                if 'area [m2]' in line_lower or 'area [m²]' in line_lower:
-                    # Next line should have the value
-                    if i + 1 < len(lines):
-                        next_line = lines[i + 1].strip()
-                        next_parts = next_line.split(',')
-                        for part in next_parts:
-                            try:
-                                area = float(part.strip())
-                                if 50 < area < 50000:  # Reasonable building area range (m²)
+                # Priority 1: Look for "Total Building Area" in same line (format: ",Total Building Area,472.78,")
+                # Make sure it's the main one (not a zone or sub-area)
+                if 'total building area' in line_lower and 'zone' not in line_lower and 'space' not in line_lower:
+                    for part in parts:
+                        try:
+                            area = float(part.strip())
+                            if 50 < area < 50000:  # Reasonable building area range (m²)
+                                # Only use if we don't have one yet, or if this is larger (main building area)
+                                current_area = energy_data.get('building_area', 0)
+                                if current_area == 0 or area > current_area:
                                     building_area = area
                                     energy_data['building_area'] = round(area, 2)
-                                    logger.info(f"✅ Building area from CSV (next line): {area:.2f} m²")
+                                    logger.info(f"✅ Building area from CSV (Total Building Area): {area:.2f} m²")
                                     break
-                            except (ValueError, AttributeError):
-                                continue
+                        except (ValueError, AttributeError):
+                            continue
                 
-                # Check for building area in same line (format: ",Total Building Area,421.67,")
-                if 'total building area' in line_lower or 'net conditioned building area' in line_lower:
+                # Priority 2: Look for "Net Conditioned Building Area" (same as total if not already found)
+                if 'net conditioned building area' in line_lower and energy_data.get('building_area', 0) == 0:
                     for part in parts:
                         try:
                             area = float(part.strip())
                             if 50 < area < 50000:
                                 building_area = area
                                 energy_data['building_area'] = round(area, 2)
-                                logger.info(f"✅ Building area from CSV (inline): {area:.2f} m²")
+                                logger.info(f"✅ Building area from CSV (Net Conditioned): {area:.2f} m²")
                                 break
                         except (ValueError, AttributeError):
                             continue
+                
+                # Priority 3: Check for building area header (format: ",,Area [m2],...")
+                # Only if we haven't found it yet
+                if ('area [m2]' in line_lower or 'area [m²]' in line_lower) and energy_data.get('building_area', 0) == 0:
+                    # Next line should have the value
+                    if i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        # Check if next line contains "Total Building Area" 
+                        if 'total building area' in next_line.lower():
+                            next_parts = next_line.split(',')
+                            for part in next_parts:
+                                try:
+                                    area = float(part.strip())
+                                    if 50 < area < 50000:
+                                        building_area = area
+                                        energy_data['building_area'] = round(area, 2)
+                                        logger.info(f"✅ Building area from CSV (header + Total Building Area): {area:.2f} m²")
+                                        break
+                                except (ValueError, AttributeError):
+                                    continue
                 
                 # Look for energy values
                 if any(keyword in line_lower for keyword in ['electricity', 'gas', 'energy']):
@@ -803,26 +1008,137 @@ class RobustEnergyPlusAPI:
             # Strategy 1: Query ReportMeterData for facility-level meters
             # This is the most direct way to get total energy consumption
             try:
-                cursor.execute("""
-                    SELECT 
-                        rmdd.Name,
-                        SUM(rmd.Value) as TotalValue
-                    FROM ReportMeterData rmd
-                    JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
-                    WHERE rmdd.Name LIKE '%Facility%'
-                    GROUP BY rmdd.Name
-                """)
+                # Check schema of both tables
+                cursor.execute("PRAGMA table_info(ReportMeterData)")
+                meter_columns = [row[1] for row in cursor.fetchall()]
+                logger.info(f"📊 ReportMeterData columns: {meter_columns}")
+                
+                cursor.execute("PRAGMA table_info(ReportMeterDataDictionary)")
+                dict_columns = [row[1] for row in cursor.fetchall()]
+                logger.info(f"📊 ReportMeterDataDictionary columns: {dict_columns}")
+                
+                # Find value column - EnergyPlus uses 'VariableValue' in ReportMeterData
+                value_col = 'VariableValue' if 'VariableValue' in meter_columns else 'Value' if 'Value' in meter_columns else 'MeterValue' if 'MeterValue' in meter_columns else meter_columns[-1] if meter_columns else 'VariableValue'
+                
+                # Find name column - EnergyPlus uses 'VariableName' for meter name (KeyValue may be None)
+                # Check both KeyValue and VariableName columns
+                name_col = None
+                if 'VariableName' in dict_columns:
+                    name_col = 'VariableName'
+                elif 'KeyValue' in dict_columns:
+                    name_col = 'KeyValue'
+                elif 'Name' in dict_columns:
+                    name_col = 'Name'
+                else:
+                    name_col = dict_columns[-2] if len(dict_columns) > 1 else 'VariableName'
+                
+                logger.info(f"   Using value column: {value_col}, name column: {name_col}")
+                
+                # Query for RunPeriod meters - get the last timestep value (final cumulative)
+                # Use VariableName for matching (KeyValue may be None)
+                # Build query based on available columns
+                if 'VariableName' in dict_columns:
+                    # Use VariableName (most reliable)
+                    cursor.execute("""
+                        SELECT 
+                            COALESCE(rmdd.VariableName, rmdd.KeyValue, 'Unknown') as MeterName,
+                            rmdd.ReportingFrequency,
+                            rmdd.VariableUnits,
+                            rmd.VariableValue as TotalValue
+                        FROM ReportMeterData rmd
+                        JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                        JOIN (
+                            SELECT 
+                                rmdd2.ReportMeterDataDictionaryIndex,
+                                MAX(rmd2.TimeIndex) as MaxTimeIndex
+                            FROM ReportMeterData rmd2
+                            JOIN ReportMeterDataDictionary rmdd2 ON rmd2.ReportMeterDataDictionaryIndex = rmdd2.ReportMeterDataDictionaryIndex
+                            WHERE (rmdd2.VariableName LIKE '%Electricity:Facility%' OR rmdd2.VariableName LIKE '%NaturalGas:Facility%')
+                               AND (rmdd2.ReportingFrequency LIKE '%Run Period%' OR rmdd2.ReportingFrequency LIKE '%RunPeriod%')
+                            GROUP BY rmdd2.ReportMeterDataDictionaryIndex
+                        ) max_times ON rmd.ReportMeterDataDictionaryIndex = max_times.ReportMeterDataDictionaryIndex
+                            AND rmd.TimeIndex = max_times.MaxTimeIndex
+                        WHERE (rmdd.VariableName LIKE '%Electricity:Facility%' OR rmdd.VariableName LIKE '%NaturalGas:Facility%')
+                           AND (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
+                    """)
+                elif 'KeyValue' in dict_columns:
+                    # Fallback to KeyValue
+                    cursor.execute(f"""
+                        SELECT 
+                            COALESCE(rmdd.KeyValue, 'Unknown') as MeterName,
+                            rmdd.ReportingFrequency,
+                            rmdd.VariableUnits,
+                            rmd.{value_col} as TotalValue
+                        FROM ReportMeterData rmd
+                        JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                        JOIN (
+                            SELECT 
+                                rmdd2.ReportMeterDataDictionaryIndex,
+                                MAX(rmd2.TimeIndex) as MaxTimeIndex
+                            FROM ReportMeterData rmd2
+                            JOIN ReportMeterDataDictionary rmdd2 ON rmd2.ReportMeterDataDictionaryIndex = rmdd2.ReportMeterDataDictionaryIndex
+                            WHERE (rmdd2.KeyValue LIKE '%Electricity:Facility%' OR rmdd2.KeyValue LIKE '%NaturalGas:Facility%')
+                               AND (rmdd2.ReportingFrequency LIKE '%Run Period%' OR rmdd2.ReportingFrequency LIKE '%RunPeriod%')
+                            GROUP BY rmdd2.ReportMeterDataDictionaryIndex
+                        ) max_times ON rmd.ReportMeterDataDictionaryIndex = max_times.ReportMeterDataDictionaryIndex
+                            AND rmd.TimeIndex = max_times.MaxTimeIndex
+                        WHERE (rmdd.KeyValue LIKE '%Electricity:Facility%' OR rmdd.KeyValue LIKE '%NaturalGas:Facility%')
+                           AND (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
+                    """)
+                else:
+                    # Generic fallback
+                    cursor.execute(f"""
+                        SELECT 
+                            rmdd.{name_col} as MeterName,
+                            rmdd.ReportingFrequency,
+                            rmdd.VariableUnits,
+                            MAX(rmd.{value_col}) as TotalValue
+                        FROM ReportMeterData rmd
+                        JOIN ReportMeterDataDictionary rmdd ON rmd.ReportMeterDataDictionaryIndex = rmdd.ReportMeterDataDictionaryIndex
+                        WHERE (rmdd.{name_col} LIKE '%Electricity:Facility%' OR rmdd.{name_col} LIKE '%NaturalGas:Facility%')
+                           AND (rmdd.ReportingFrequency LIKE '%Run Period%' OR rmdd.ReportingFrequency LIKE '%RunPeriod%')
+                        GROUP BY rmdd.{name_col}
+                    """)
                 
                 meter_results = cursor.fetchall()
                 logger.info(f"📊 Strategy 1 (ReportMeterData): Found {len(meter_results)} facility meters")
+                if meter_results:
+                    for result in meter_results:
+                        if len(result) >= 4:
+                            name, freq, units, value = result[0], result[1], result[2], result[3]
+                            # Convert based on units
+                            if units and units.upper() in ['J', 'JOULES']:
+                                value_kwh = value / 3600000
+                            elif units and units.upper() in ['KWH']:
+                                value_kwh = value
+                            else:
+                                value_kwh = value / 3600000  # Default assume J
+                            logger.info(f"   Meter: {name} | Units: {units} | Freq: {freq} | Value: {value_kwh:.2f} kWh")
+                        else:
+                            name, value = result[0], result[1] if len(result) > 1 else result[-1]
+                            value_kwh = value / 3600000  # Default assume J
+                        logger.info(f"   Meter: {name} = {value_kwh:.2f} kWh")
                 
                 electricity_kwh = 0
                 gas_kwh = 0
                 total_energy = 0
                 
-                for name, value in meter_results:
-                    name_lower = name.lower()
-                    value_kwh = value / 3600000  # Convert J to kWh (EnergyPlus stores in J)
+                for result in meter_results:
+                    if len(result) >= 4:
+                        name, freq, units, value = result[0], result[1], result[2], result[3]
+                    else:
+                        name = result[0]
+                        value = result[1] if len(result) > 1 else result[-1]
+                        units = None
+                    
+                    name_lower = name.lower() if name else ''
+                    # Convert based on units
+                    if units and units.upper() in ['J', 'JOULES']:
+                        value_kwh = value / 3600000
+                    elif units and units.upper() in ['KWH']:
+                        value_kwh = value
+                    else:
+                        value_kwh = value / 3600000  # Default assume J
                     
                     # Extract electricity and gas separately
                     if 'electricity:facility' in name_lower or 'electricitynet:facility' in name_lower:
@@ -880,46 +1196,88 @@ class RobustEnergyPlusAPI:
             except Exception as e:
                 logger.warning(f"⚠️  Strategy 1 failed: {e}")
             
-            # Strategy 2: Query ReportData for end-use variables
-            # This extracts individual end-use categories
+            # Strategy 2: Query ReportData for facility-level variables ONLY
+            # Only use this if Strategy 1 found no facility meters
+            # Focus on facility-level totals, not hourly data
             if energy_data.get('total_energy_consumption', 0) == 0:
                 try:
+                    # Only look for facility-level variables that are annual totals
+                    # For RunPeriod reporting, get the LAST timestep value (final cumulative value)
+                    # Use a subquery to get the maximum TimeIndex, then get the value at that time
                     cursor.execute("""
                         SELECT 
                             rdd.Name,
                             rdd.Units,
-                            SUM(rd.Value) as TotalValue
+                            rdd.ReportingFrequency,
+                            rd.Value as TotalValue
                         FROM ReportData rd
                         JOIN ReportDataDictionary rdd ON rd.ReportDataDictionaryIndex = rdd.ReportDataDictionaryIndex
-                        WHERE rdd.Name LIKE '%Energy%' 
-                           OR rdd.Name LIKE '%Electricity%'
-                           OR rdd.Name LIKE '%Heating%'
-                           OR rdd.Name LIKE '%Cooling%'
-                           OR rdd.Name LIKE '%Lighting%'
-                           OR rdd.Name LIKE '%Equipment%'
-                        GROUP BY rdd.Name, rdd.Units
+                        JOIN (
+                            SELECT 
+                                rdd2.ReportDataDictionaryIndex,
+                                MAX(rd2.TimeIndex) as MaxTimeIndex
+                            FROM ReportData rd2
+                            JOIN ReportDataDictionary rdd2 ON rd2.ReportDataDictionaryIndex = rdd2.ReportDataDictionaryIndex
+                            WHERE ((rdd2.Name LIKE '%Electricity:Facility%')
+                               OR (rdd2.Name LIKE '%NaturalGas:Facility%'))
+                               AND rdd2.ReportingFrequency LIKE '%Run Period%'
+                            GROUP BY rdd2.ReportDataDictionaryIndex
+                        ) max_times ON rd.ReportDataDictionaryIndex = max_times.ReportDataDictionaryIndex
+                            AND rd.TimeIndex = max_times.MaxTimeIndex
+                        WHERE ((rdd.Name LIKE '%Electricity:Facility%')
+                           OR (rdd.Name LIKE '%NaturalGas:Facility%'))
+                           AND rdd.ReportingFrequency LIKE '%Run Period%'
                     """)
                     
                     report_results = cursor.fetchall()
-                    logger.info(f"📊 Strategy 2 (ReportData): Found {len(report_results)} energy variables")
+                    logger.info(f"📊 Strategy 2 (ReportData): Found {len(report_results)} facility-level variables")
+                    if report_results:
+                        for name, units, freq, value in report_results[:5]:
+                            logger.info(f"   Raw: {name} | Units: '{units}' | Freq: {freq} | Value: {value}")
+                            # EnergyPlus stores in Joules - convert to kWh
+                            if units in ['J', 'Joules', '']:
+                                value_kwh = value / 3600000  # J to kWh
+                                logger.info(f"   Converted (J→kWh): {value_kwh:.2f} kWh")
+                            elif units in ['kWh', 'KWH']:
+                                value_kwh = value
+                                logger.info(f"   Already kWh: {value_kwh:.2f} kWh")
+                            else:
+                                value_kwh = value / 3600000  # Default assume J
+                                logger.info(f"   Unknown units '{units}', assuming J: {value_kwh:.2f} kWh")
                     
                     total_energy = 0
-                    for name, units, value in report_results:
+                    electricity_kwh = 0
+                    gas_kwh = 0
+                    for name, units, freq, value in report_results:
                         name_lower = name.lower()
                         
+                        # Only use RunPeriod or annual totals, skip hourly data
+                        if freq and 'hourly' in freq.lower() and 'runperiod' not in freq.lower():
+                            logger.info(f"   Skipping hourly data: {name} ({freq})")
+                            continue
+                        
                         # Convert to kWh based on units
-                        if units == 'J' or units == 'Joules':
+                        if units in ['J', 'Joules']:
                             value_kwh = value / 3600000
                         elif units == 'GJ':
                             value_kwh = value * 277.778
-                        elif units == 'kWh' or units == 'kWh':
+                        elif units in ['kWh', 'kWh']:
                             value_kwh = value
                         else:
                             value_kwh = value / 3600000  # Default assume J
                         
-                        # Categorize by name
-                        if 'facility' in name_lower and ('electricity' in name_lower or 'total' in name_lower):
+                        # Only use facility-level totals
+                        if 'electricity:facility' in name_lower or 'electricitynet:facility' in name_lower:
+                            electricity_kwh += value_kwh
                             total_energy += value_kwh
+                            logger.info(f"   ✅ Facility electricity: {name} = {value_kwh:.2f} kWh")
+                        elif 'naturalgas:facility' in name_lower or ('gas:facility' in name_lower and 'natural' in name_lower):
+                            gas_kwh += value_kwh
+                            total_energy += value_kwh
+                            logger.info(f"   ✅ Facility gas: {name} = {value_kwh:.2f} kWh")
+                        elif 'facility' in name_lower and ('total' in name_lower or 'site' in name_lower):
+                            total_energy += value_kwh
+                            logger.info(f"   ✅ Facility total: {name} = {value_kwh:.2f} kWh")
                         elif 'heating' in name_lower:
                             if 'heating_energy' not in energy_data:
                                 energy_data['heating_energy'] = 0
@@ -946,8 +1304,26 @@ class RobustEnergyPlusAPI:
                             energy_data['pumps_energy'] += value_kwh
                     
                     if total_energy > 0:
-                        energy_data['total_energy_consumption'] = round(total_energy, 2)
-                        logger.info(f"✅ Strategy 2: Total energy = {total_energy:.2f} kWh")
+                        # Validation: Check if values are reasonable
+                        # For office buildings, EUI should be 20-50 kWh/m² typically
+                        # If we have building area, validate EUI
+                        building_area = energy_data.get('building_area', 0)
+                        if building_area > 0:
+                            eui = total_energy / building_area
+                            if eui > 500:  # Sanity check: EUI > 500 kWh/m² is clearly wrong
+                                logger.warning(f"⚠️  SQLite values seem unreasonable: EUI = {eui:.2f} kWh/m²")
+                                logger.warning(f"   Expected range: 20-50 kWh/m² for office buildings")
+                                logger.warning(f"   Rejecting SQLite values, will use HTML/CSV instead")
+                                total_energy = 0  # Reject these values
+                            else:
+                                logger.info(f"✅ Strategy 2: Total site energy = {total_energy:.2f} kWh (Electricity: {electricity_kwh:.2f}, Gas: {gas_kwh:.2f}, EUI: {eui:.2f} kWh/m²)")
+                        
+                        if total_energy > 0:
+                            energy_data['total_energy_consumption'] = round(total_energy, 2)
+                            energy_data['electricity_kwh'] = round(electricity_kwh, 2)
+                            energy_data['gas_kwh'] = round(gas_kwh, 2)
+                        else:
+                            logger.info(f"⚠️  Strategy 2: Values rejected as unreasonable")
                         
                 except Exception as e:
                     logger.warning(f"⚠️  Strategy 2 failed: {e}")
@@ -1112,7 +1488,10 @@ class RobustEnergyPlusAPI:
             # 4. SQLite database info
             sqlite_info = {}
             for file in output_files:
-                if file['name'].endswith('.sqlite') or file['name'].endswith('.sqlite3') or file['name'].endswith('.db'):
+                # EnergyPlus generates SQLite as .sql files (eplusout.sql)
+                if (file['name'].endswith('.sqlite') or file['name'].endswith('.sqlite3') or 
+                    file['name'].endswith('.db') or 
+                    (file['name'].endswith('.sql') and 'eplusout' in file['name'])):
                     sqlite_path = os.path.join(output_dir, file['name'])
                     try:
                         import sqlite3
@@ -1186,6 +1565,34 @@ class RobustEnergyPlusAPI:
                 energy_intensity = total_energy / building_area
                 energy_data['energy_intensity'] = round(energy_intensity, 2)
                 energy_data['energyUseIntensity'] = round(energy_intensity, 2)  # camelCase for UI
+                
+                # FIX 3: Validate EUI - detect suspiciously low values
+                if energy_intensity < 5:
+                    logger.warning(f"⚠️  WARNING: EUI ({energy_intensity:.2f} kWh/m²) is suspiciously low!")
+                    logger.warning(f"   Expected range: 15-50 kWh/m² for office buildings")
+                    logger.warning(f"   This suggests energy extraction may be incomplete")
+                    logger.warning(f"   Total energy: {total_energy:.2f} kWh for {building_area:.2f} m² building")
+                    
+                    # Check breakdown completeness
+                    breakdown_total = (
+                        energy_data.get('heating_energy', 0) +
+                        energy_data.get('cooling_energy', 0) +
+                        energy_data.get('lighting_energy', 0) +
+                        energy_data.get('equipment_energy', 0) +
+                        energy_data.get('fans_energy', 0) +
+                        energy_data.get('pumps_energy', 0)
+                    )
+                    
+                    if breakdown_total < total_energy * 0.5:
+                        logger.warning(f"⚠️  CRITICAL: Breakdown ({breakdown_total:.2f} kWh) is <50% of total ({total_energy:.2f} kWh)")
+                        logger.warning(f"   This indicates missing energy categories in breakdown")
+                        logger.warning(f"   Energy extraction is likely incomplete!")
+                        energy_data['_energy_extraction_incomplete'] = True
+                    elif breakdown_total == 0:
+                        logger.warning(f"⚠️  CRITICAL: Breakdown is completely zero (0.00 kWh)")
+                        logger.warning(f"   This indicates breakdown extraction failed!")
+                        logger.warning(f"   Total energy may be incomplete - check facility-level meters")
+                        energy_data['_energy_extraction_incomplete'] = True
             
             # Calculate peak demand (kW)
             # Peak demand is typically 1.2-1.5x the average hourly consumption

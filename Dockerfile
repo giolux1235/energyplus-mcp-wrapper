@@ -19,5 +19,5 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-# Run the EnergyPlus simulator with full capabilities
-CMD ["python", "professional-parser.py"]
+# Run the EnergyPlus robust API (matches Procfile)
+CMD ["python", "energyplus-robust-api.py"]
