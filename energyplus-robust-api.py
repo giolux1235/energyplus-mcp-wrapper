@@ -493,7 +493,39 @@ class RobustEnergyPlusAPI:
                 error_response.update(output_info)  # Include output info even in error case
                 return error_response
             
-            # Parse output data
+            # Check if extraction should be skipped (for local extraction workflow)
+            skip_extraction = os.environ.get('SKIP_ENERGY_EXTRACTION', 'false').lower() == 'true'
+            
+            if skip_extraction:
+                logger.info("⚡ Skipping energy extraction (SKIP_ENERGY_EXTRACTION=true)")
+                logger.info("   Returning raw output files for local extraction")
+                
+                # Build response with just output info (no extraction)
+                response = {
+                    "version": self.version,
+                    "simulation_status": "success",
+                    "energyplus_version": "25.1.0",
+                    "real_simulation": True,
+                    "exit_code": exit_code,
+                    "warnings_count": len(warnings),
+                    "warnings": warnings[:10] if warnings else [],
+                    "processing_time": datetime.now().isoformat(),
+                    "extraction_skipped": True,
+                    "extraction_note": "Energy extraction skipped. Use extract-energy-local.py to extract energy data from output_files.",
+                    **output_info  # Include error file, output files list, CSV preview, SQLite info
+                }
+                
+                # Add note about local extraction
+                response['local_extraction_instructions'] = {
+                    "tool": "extract-energy-local.py",
+                    "usage": "python extract-energy-local.py <output_directory> --period-days 7",
+                    "output_files_location": "See output_files list in this response"
+                }
+                
+                logger.info("✅ Returning raw output files (extraction skipped)")
+                return response
+            
+            # Parse output data (normal flow)
             energy_data = self.parse_all_output_files(output_dir)
             
             # If no energy data found, explain why
@@ -2297,7 +2329,7 @@ class RobustEnergyPlusAPI:
             logger.error(f"Traceback: {traceback.format_exc()}")
         finally:
             try:
-                client_socket.close()
+            client_socket.close()
             except:
                 pass
     
