@@ -8,4 +8,4 @@ cmds = ["pip install -r requirements-test.txt"]
 cmds = ["echo 'Build complete'"]
 
 [start]
-cmd = "python simple-http-wrapper-test.py"
+cmd = "python energyplus-robust-api.py"
