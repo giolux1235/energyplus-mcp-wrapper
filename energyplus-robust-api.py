@@ -45,20 +45,38 @@ class RobustEnergyPlusAPI:
         logger.info(f"📊 EnergyPlus EXE: {self.energyplus_exe}")
         logger.info(f"📊 EnergyPlus IDD: {self.energyplus_idd}")
         
-        # Test EnergyPlus installation
-        self.test_energyplus()
+        # Test EnergyPlus installation (non-blocking)
+        self.energyplus_available = self.test_energyplus()
+        
+        if not self.energyplus_available:
+            logger.warning("⚠️  Starting service without EnergyPlus - simulations will fail")
+        else:
+            logger.info("✅ Service ready with EnergyPlus available")
     
     def test_energyplus(self):
-        """Test EnergyPlus installation"""
+        """Test EnergyPlus installation - graceful failure"""
         try:
+            if not os.path.exists(self.energyplus_exe):
+                logger.warning(f"⚠️  EnergyPlus not found at: {self.energyplus_exe}")
+                logger.warning("   Service will start but simulations will fail until EnergyPlus is installed")
+                return False
+            
             result = subprocess.run([self.energyplus_exe, '--version'], 
-                                  capture_output=True, text=True, timeout=30)
+                                  capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 logger.info(f"✅ EnergyPlus installed: {result.stdout.strip()}")
+                return True
             else:
-                logger.error(f"❌ EnergyPlus test failed: {result.stderr}")
+                logger.warning(f"⚠️  EnergyPlus test failed: {result.stderr}")
+                logger.warning("   Service will start but simulations will fail")
+                return False
+        except subprocess.TimeoutExpired:
+            logger.warning(f"⚠️  EnergyPlus version check timed out")
+            return False
         except Exception as e:
-            logger.error(f"❌ EnergyPlus test error: {e}")
+            logger.warning(f"⚠️  EnergyPlus test error: {e}")
+            logger.warning("   Service will start but simulations will fail")
+            return False
     
     def optimize_idf_for_fast_simulation(self, idf_content):
         """Optimize IDF for fast simulation by shortening the run period"""
@@ -1996,7 +2014,9 @@ class RobustEnergyPlusAPI:
         response = {
             "status": "healthy",
             "version": self.version,
-            "energyplus_available": os.path.exists(self.energyplus_exe),
+            "energyplus_available": getattr(self, 'energyplus_available', False) or os.path.exists(self.energyplus_exe),
+            "energyplus_exe": self.energyplus_exe,
+            "energyplus_idd": self.energyplus_idd,
             "timestamp": datetime.now().isoformat()
         }
         self.send_json_response(client_socket, response)
