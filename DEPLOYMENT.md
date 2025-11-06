@@ -92,22 +92,30 @@ This will output the `MCP_SERVER_URL` that you can use in your other projects.
 
 **Node.js/JavaScript:**
 ```javascript
-const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'https://your-app-name.railway.app';
+const API_URL = process.env.ENERGYPLUS_API_URL || 'https://your-app-name.railway.app';
 
-// Call EnergyPlus tools
-async function callEnergyPlusTool(tool, args = {}) {
-  const response = await fetch(`${MCP_SERVER_URL}/rpc`, {
+// Run EnergyPlus simulation with IDF and weather files
+async function runSimulation(idfContent, weatherContent) {
+  const response = await fetch(`${API_URL}/simulate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, arguments: args })
+    body: JSON.stringify({
+      idf_content: idfContent,      // IDF file content as string
+      weather_content: weatherContent // EPW weather file content as string
+    })
   });
   return response.json();
 }
 
 // Example usage
-const result = await callEnergyPlusTool('load_idf_model', { 
-  idf_path: 'sample_files/1ZoneUncontrolled.idf' 
-});
+const idfContent = await fetch('path/to/building.idf').then(r => r.text());
+const weatherContent = await fetch('path/to/weather.epw').then(r => r.text());
+
+const result = await runSimulation(idfContent, weatherContent);
+if (result.simulation_status === 'success') {
+  console.log(`Total Energy: ${result.total_energy_consumption} kWh`);
+  console.log(`EUI: ${result.energy_intensity} kWh/m²`);
+}
 ```
 
 **Python:**
@@ -115,22 +123,47 @@ const result = await callEnergyPlusTool('load_idf_model', {
 import os
 import requests
 
-MCP_SERVER_URL = os.getenv('MCP_SERVER_URL', 'https://your-app-name.railway.app')
+API_URL = os.getenv('ENERGYPLUS_API_URL', 'https://your-app-name.railway.app')
 
-def call_energyplus_tool(tool, args=None):
-    response = requests.post(f"{MCP_SERVER_URL}/rpc", 
-                           json={"tool": tool, "arguments": args or {}})
+def run_simulation(idf_content, weather_content):
+    """Run EnergyPlus simulation with IDF and weather files"""
+    response = requests.post(
+        f"{API_URL}/simulate",
+        json={
+            'idf_content': idf_content,      # IDF file content as string
+            'weather_content': weather_content # EPW weather file content as string
+        },
+        timeout=600  # 10 minutes timeout for long simulations
+    )
     return response.json()
 
 # Example usage
-result = call_energyplus_tool('get_server_status')
+with open('building.idf', 'r') as f:
+    idf_content = f.read()
+
+with open('weather.epw', 'r') as f:
+    weather_content = f.read()
+
+result = run_simulation(idf_content, weather_content)
+if result['simulation_status'] == 'success':
+    print(f"Total Energy: {result['total_energy_consumption']} kWh")
+    print(f"EUI: {result['energy_intensity']} kWh/m²")
 ```
 
 **Environment Variables:**
 ```bash
 # Add to your other project's .env
-MCP_SERVER_URL=https://your-app-name.railway.app
+ENERGYPLUS_API_URL=https://your-app-name.railway.app
 ```
+
+**Important Notes:**
+- **Weather files (`.epw`) are required** for annual simulations. The API accepts weather file content as a string in the `weather_content` field.
+- Weather files can be:
+  - Downloaded from NREL's weather database (https://energyplus.net/weather)
+  - Generated from climate data
+  - Provided by users
+- The API will automatically use the weather file location data if it differs from the IDF's location settings (this is normal and expected).
+- Both `idf_content` and `weather_content` must be the **full file contents as strings** (not file paths).
 
 ## 📱 Building a Web App
 
@@ -162,50 +195,59 @@ Once deployed, you can build a web app that uses the API:
         </div>
         
         <div class="tool">
-            <h3>📁 Available Files</h3>
-            <button onclick="listFiles()">List Files</button>
-            <div id="filesResult" class="result"></div>
-        </div>
-        
-        <div class="tool">
-            <h3>🏢 Load Building Model</h3>
-            <input type="text" id="modelPath" placeholder="sample_files/1ZoneUncontrolled.idf" style="width: 300px;">
-            <button onclick="loadModel()">Load Model</button>
-            <div id="modelResult" class="result"></div>
+            <h3>⚡ Run Simulation</h3>
+            <p>Upload IDF and weather files to run a simulation:</p>
+            <input type="file" id="idfFile" accept=".idf" style="margin: 10px 0;">
+            <label>IDF File (.idf)</label><br>
+            <input type="file" id="weatherFile" accept=".epw" style="margin: 10px 0;">
+            <label>Weather File (.epw)</label><br>
+            <button onclick="runSimulation()">Run Simulation</button>
+            <div id="simulationResult" class="result"></div>
         </div>
     </div>
 
     <script>
         const API_URL = 'https://your-app-name.railway.app'; // Replace with your deployed URL
         
-        async function callAPI(tool, args = {}) {
+        // Check server health
+        async function getStatus() {
             try {
-                const response = await fetch(`${API_URL}/rpc`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ tool, arguments: args })
-                });
+                const response = await fetch(`${API_URL}/health`);
                 const data = await response.json();
-                return data.result;
+                document.getElementById('statusResult').textContent = JSON.stringify(data, null, 2);
             } catch (error) {
-                return `Error: ${error.message}`;
+                document.getElementById('statusResult').textContent = `Error: ${error.message}`;
             }
         }
         
-        async function getStatus() {
-            const result = await callAPI('get_server_status');
-            document.getElementById('statusResult').textContent = result;
-        }
-        
-        async function listFiles() {
-            const result = await callAPI('list_available_files');
-            document.getElementById('filesResult').textContent = result;
-        }
-        
-        async function loadModel() {
-            const modelPath = document.getElementById('modelPath').value;
-            const result = await callAPI('load_idf_model', { idf_path: modelPath });
-            document.getElementById('modelResult').textContent = result;
+        // Run simulation with IDF and weather files
+        async function runSimulation() {
+            const idfFile = document.getElementById('idfFile').files[0];
+            const weatherFile = document.getElementById('weatherFile').files[0];
+            
+            if (!idfFile || !weatherFile) {
+                alert('Please select both IDF and weather files');
+                return;
+            }
+            
+            try {
+                const idfContent = await idfFile.text();
+                const weatherContent = await weatherFile.text();
+                
+                const response = await fetch(`${API_URL}/simulate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        idf_content: idfContent,
+                        weather_content: weatherContent
+                    })
+                });
+                
+                const data = await response.json();
+                document.getElementById('simulationResult').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('simulationResult').textContent = `Error: ${error.message}`;
+            }
         }
     </script>
 </body>
@@ -217,28 +259,59 @@ Once deployed, you can build a web app that uses the API:
 import React, { useState } from 'react';
 
 function EnergyPlusApp() {
-  const [result, setResult] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const API_URL = process.env.REACT_APP_ENERGYPLUS_API_URL || 'https://your-app-name.railway.app';
   
-  const callAPI = async (tool, args = {}) => {
-    const response = await fetch('/rpc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tool, arguments: args })
-    });
-    const data = await response.json();
-    return data.result;
+  const runSimulation = async (idfFile, weatherFile) => {
+    setLoading(true);
+    try {
+      const idfContent = await idfFile.text();
+      const weatherContent = await weatherFile.text();
+      
+      const response = await fetch(`${API_URL}/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idf_content: idfContent,
+          weather_content: weatherContent
+        })
+      });
+      
+      const data = await response.json();
+      setResult(data);
+    } catch (error) {
+      setResult({ error: error.message });
+    } finally {
+      setLoading(false);
+    }
   };
   
-  const handleGetStatus = async () => {
-    const result = await callAPI('get_server_status');
-    setResult(result);
+  const handleFileUpload = async (e) => {
+    e.preventDefault();
+    const idfFile = e.target.idfFile.files[0];
+    const weatherFile = e.target.weatherFile.files[0];
+    
+    if (idfFile && weatherFile) {
+      await runSimulation(idfFile, weatherFile);
+    }
   };
   
   return (
     <div>
       <h1>EnergyPlus Building Simulator</h1>
-      <button onClick={handleGetStatus}>Get Status</button>
-      <pre>{result}</pre>
+      <form onSubmit={handleFileUpload}>
+        <input type="file" name="idfFile" accept=".idf" required />
+        <label>IDF File</label>
+        <input type="file" name="weatherFile" accept=".epw" required />
+        <label>Weather File (.epw)</label>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Running...' : 'Run Simulation'}
+        </button>
+      </form>
+      {result && (
+        <pre>{JSON.stringify(result, null, 2)}</pre>
+      )}
     </div>
   );
 }
@@ -264,10 +337,18 @@ EPLUS_EXECUTABLE_PATH=/usr/local/bin/energyplus
 
 Your deployed app will have these endpoints:
 
-- `GET /` - API documentation
-- `GET /status` - Server status
-- `GET /tools` - List available tools
-- `POST /rpc` - Execute any EnergyPlus tool
+- `GET /` - API information
+- `GET /health` - Server health check (returns EnergyPlus availability status)
+- `POST /simulate` - Run EnergyPlus simulation with IDF and weather files
+  - **Request Body:**
+    ```json
+    {
+      "idf_content": "string",      // IDF file content as string
+      "weather_content": "string"   // EPW weather file content as string (required for annual simulations)
+    }
+    ```
+  - **Response:** JSON with simulation results, energy data, and download URLs for output files
+- `GET /download/{simulation_id}/{filename}` - Download simulation output files
 
 ## 🎯 Next Steps
 

@@ -234,27 +234,49 @@ else:
 
 ## 📁 What About the Actual Files?
 
-### Files Are NOT Returned
+### Files Are Available for Download
 
-The EnergyPlus output files (`.sql`, `.html`, `.csv`, `.err`) are:
+The EnergyPlus output files (`.sql`, `.html`, `.csv`, `.err`, etc.) are:
 - ✅ Generated during simulation
-- ✅ Parsed by the API
-- ❌ **NOT returned to the client**
-- ❌ **Deleted after parsing** (temp directory cleanup)
+- ✅ Parsed by the API (data included in JSON response)
+- ✅ **Saved and available for download** via download URLs
+- ✅ **Available for 24 hours** (configurable via `FILE_RETENTION_HOURS`)
 
-### If You Need the Files
+### Downloading Output Files
 
-If you need the actual EnergyPlus output files, you have two options:
+The API response includes `output_files_download` with download URLs:
 
-1. **Run EnergyPlus Locally**
-   ```bash
-   energyplus -w weather.epw -d output_dir input.idf
-   ```
+```json
+{
+  "simulation_status": "success",
+  "simulation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "output_files_download": {
+    "eplusout.sql": {
+      "url": "/download/550e8400-e29b-41d4-a716-446655440000/eplusout.sql",
+      "size_bytes": 3379200,
+      "size_mb": 3.22
+    },
+    "eplustbl.htm": {
+      "url": "/download/550e8400-e29b-41d4-a716-446655440000/eplustbl.htm",
+      "size_bytes": 330085,
+      "size_mb": 0.31
+    }
+    // ... all 19 output files
+  },
+  "download_base_url": "https://web-production-1d1be.up.railway.app",
+  "files_available_until": "2025-11-07T08:18:13.485598"
+}
+```
 
-2. **Modify the API** (not recommended)
-   - Change the API to save files to persistent storage
-   - Return file URLs instead of parsed data
-   - This would require significant changes
+**Download Example:**
+```javascript
+// Construct full download URL
+const fileUrl = `${data.download_base_url}${data.output_files_download['eplusout.sql'].url}`;
+// Download the file
+window.open(fileUrl, '_blank');
+```
+
+See [FILE_DOWNLOAD_FEATURE.md](./FILE_DOWNLOAD_FEATURE.md) for complete details on downloading files.
 
 ---
 
