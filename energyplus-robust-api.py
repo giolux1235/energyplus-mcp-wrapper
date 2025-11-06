@@ -101,14 +101,14 @@ class RobustEnergyPlusAPI:
                 end_month = int(match.group(6))
                 end_day = int(match.group(8))
                 
-                # If it's a full year (Jan 1 to Dec 31), change to 1 month (Jan 1 to Jan 31)
+                # If it's a full year (Jan 1 to Dec 31), change to 2 weeks (Jan 1 to Jan 14) for faster completion
                 if begin_month == 1 and begin_day == 1 and end_month == 12 and end_day == 31:
-                    logger.info("   Changing RunPeriod from full year (Jan 1 - Dec 31) to 1 month (Jan 1 - Jan 31)")
-                    return f"{name_part}1{match.group(3)}1{match.group(5)}1{match.group(7)}31"
-                # If it's more than 1 month, reduce to 1 month
-                elif end_month > begin_month or (end_month == begin_month and end_day > 31):
-                    logger.info(f"   Reducing RunPeriod from {begin_month}/{begin_day} to {end_month}/{end_day} to 1 month")
-                    return f"{name_part}{begin_month}{match.group(3)}{begin_day}{match.group(5)}{begin_month}{match.group(7)}31"
+                    logger.info("   Changing RunPeriod from full year (Jan 1 - Dec 31) to 2 weeks (Jan 1 - Jan 14) for free tier")
+                    return f"{name_part}1{match.group(3)}1{match.group(5)}1{match.group(7)}14"
+                # If it's more than 2 weeks, reduce to 2 weeks
+                elif end_month > begin_month or (end_month == begin_month and end_day > 14):
+                    logger.info(f"   Reducing RunPeriod from {begin_month}/{begin_day} to {end_month}/{end_day} to 2 weeks")
+                    return f"{name_part}{begin_month}{match.group(3)}{begin_day}{match.group(5)}{begin_month}{match.group(7)}14"
                 # Otherwise keep as is
                 else:
                     logger.info(f"   RunPeriod already short ({begin_month}/{begin_day} to {end_month}/{end_day}), keeping as is")
@@ -127,11 +127,11 @@ class RobustEnergyPlusAPI:
                 end_month = int(match.group(6))
                 end_day = int(match.group(8))
                 
-                # If it's a full year or long period, shorten to 1 month
+                # If it's a full year or long period, shorten to 2 weeks
                 if (begin_month == 1 and begin_day == 1 and end_month == 12 and end_day == 31) or \
                    (end_month > begin_month + 1):
-                    logger.info(f"   Shortening RunPeriod to 1 month (Jan 1-31)")
-                    return f"{match.group(1)}1{match.group(3)}1{match.group(5)}1{match.group(7)}31"
+                    logger.info(f"   Shortening RunPeriod to 2 weeks (Jan 1-14) for free tier")
+                    return f"{match.group(1)}1{match.group(3)}1{match.group(5)}1{match.group(7)}14"
                 return match.group(0)
             
             modified_content = re.sub(simple_pattern, replace_simple_run_period, modified_content, flags=re.MULTILINE)
@@ -148,9 +148,9 @@ class RobustEnergyPlusAPI:
                 def replace_aggressive(match):
                     end_month = int(match.group(2))
                     end_day = int(match.group(4))
-                    if end_month > 1:
-                        logger.info(f"   Aggressively shortening RunPeriod: End_Month {end_month} -> 1")
-                        return f"{match.group(1)}1{match.group(3)}31"
+                    if end_month > 1 or end_day > 14:
+                        logger.info(f"   Aggressively shortening RunPeriod: End_Month {end_month}, End_Day {end_day} -> Jan 14")
+                        return f"{match.group(1)}1{match.group(3)}14"
                     return match.group(0)
                 
                 modified_content = re.sub(aggressive_pattern, replace_aggressive, idf_content)
@@ -231,9 +231,9 @@ class RobustEnergyPlusAPI:
             
             if optimize_for_free_tier:
                 logger.info("⚡ Optimizing IDF for Railway free tier (shortening simulation period)...")
-                logger.info("   (Converting full year simulations to 1 month for faster completion)")
+                logger.info("   (Converting full year simulations to 2 weeks for faster completion)")
                 idf_content = self.optimize_idf_for_fast_simulation(idf_content)
-                logger.info("✅ IDF optimized for fast simulation (1 month period)")
+                logger.info("✅ IDF optimized for fast simulation (2 week period)")
             
             # Ensure Output:SQLite is in IDF - use 'Simple' for EnergyPlus 24.2.0 compatibility
             # EnergyPlus 24.2.0 may not support SimpleAndTabular, use Simple instead
@@ -312,7 +312,7 @@ class RobustEnergyPlusAPI:
                 simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 50))
                 logger.info(f"⏱️  Simulation timeout set to: {simulation_timeout} seconds")
                 if simulation_timeout <= 60:
-                    logger.info(f"   (Free tier mode: Using optimized 1-month simulation period)")
+                    logger.info(f"   (Free tier mode: Using optimized 2-week simulation period)")
                 else:
                     logger.info(f"   (Pro tier mode: Full simulation, ensure Railway HTTP timeout >= {simulation_timeout}s)")
                 
