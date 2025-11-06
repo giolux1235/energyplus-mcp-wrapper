@@ -227,13 +227,17 @@ class RobustEnergyPlusAPI:
             # OPTIMIZE FOR RAILWAY FREE TIER: Shorten simulation period if needed
             # Free tier has 60s timeout, so we run shorter periods (2 weeks) instead of full year
             simulation_timeout = int(os.environ.get('SIMULATION_TIMEOUT', 55))
-            optimize_for_free_tier = simulation_timeout <= 60  # If timeout is 60s or less, optimize
+            # Allow disabling optimization via env var for testing
+            disable_optimization = os.environ.get('DISABLE_IDF_OPTIMIZATION', 'false').lower() == 'true'
+            optimize_for_free_tier = simulation_timeout <= 60 and not disable_optimization  # If timeout is 60s or less, optimize
             
             if optimize_for_free_tier:
                 logger.info("⚡ Optimizing IDF for Railway free tier (shortening simulation period)...")
                 logger.info("   (Converting full year simulations to 1 week for faster completion)")
                 idf_content = self.optimize_idf_for_fast_simulation(idf_content)
                 logger.info("✅ IDF optimized for fast simulation (1 week period)")
+            elif disable_optimization:
+                logger.info("⚠️  IDF optimization DISABLED (DISABLE_IDF_OPTIMIZATION=true) - running full period")
             
             # Ensure Output:SQLite is in IDF - use 'Simple' for EnergyPlus 24.2.0 compatibility
             # EnergyPlus 24.2.0 may not support SimpleAndTabular, use Simple instead
