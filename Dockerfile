@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrandr2 \
     libxinerama1 \
     libxcursor1 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install EnergyPlus 25.1.0
