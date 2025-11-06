@@ -63,17 +63,28 @@ python extract-energy-local.py <output_directory> --period-days 7 --output resul
 
 ## Integration with API
 
-The API can be modified to return raw output files, and extraction can happen locally:
+The API supports skipping extraction via environment variable:
 
-```python
-# API returns download URL for output files
-response = {
-    "simulation_status": "success",
-    "output_files_url": "https://.../download/outputs.zip",
-    "raw_data": {...}  # Optional: minimal processing
-}
+### Option 1: API with Extraction (Default)
+```bash
+# API extracts energy automatically
+curl -X POST https://web-production-1d1be.up.railway.app/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"idf_content": "...", "weather_content": "..."}'
+# Returns: {"simulation_status": "success", "total_energy_consumption": 18132.7, ...}
+```
 
-# Then extract locally:
+### Option 2: API without Extraction (Local Extraction)
+Set `SKIP_ENERGY_EXTRACTION=true` in Railway environment variables, then:
+
+```bash
+# API returns raw output files info (no extraction)
+curl -X POST https://web-production-1d1be.up.railway.app/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"idf_content": "...", "weather_content": "..."}'
+# Returns: {"simulation_status": "success", "output_files": [...], "extraction_skipped": true}
+
+# Download output files, then extract locally:
 python extract-energy-local.py downloaded_outputs/ --period-days 7
 ```
 
