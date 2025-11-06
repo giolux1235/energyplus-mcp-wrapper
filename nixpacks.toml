@@ -1,11 +1,22 @@
 [phases.setup]
-nixPkgs = ["python311"]
+nixPkgs = ["python311", "wget"]
 
 [phases.install]
-cmds = ["pip install -r requirements-test.txt"]
+cmds = [
+    "pip install -r requirements-test.txt",
+    "mkdir -p /usr/local/EnergyPlus-25-1-0",
+    "wget -q https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-x86_64.tar.gz -O /tmp/eplus.tgz || wget -q https://github.com/NREL/EnergyPlus/releases/download/v25.1.0/EnergyPlus-25.1.0-68a4a7c774-Linux-Ubuntu22.04-arm64.tar.gz -O /tmp/eplus.tgz",
+    "tar -xzf /tmp/eplus.tgz -C /usr/local/EnergyPlus-25-1-0 --strip-components=1",
+    "ln -sf /usr/local/EnergyPlus-25-1-0/energyplus /usr/local/bin/energyplus",
+    "ln -sf /usr/local/EnergyPlus-25-1-0/Energy+.idd /usr/local/bin/Energy+.idd",
+    "rm /tmp/eplus.tgz"
+]
 
 [phases.build]
 cmds = ["echo 'Build complete'"]
+
+[providers]
+railway = true
 
 [start]
 cmd = "python energyplus-robust-api.py"
