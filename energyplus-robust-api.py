@@ -78,6 +78,42 @@ class RobustEnergyPlusAPI:
             logger.warning("   Service will start but simulations will fail")
             return False
     
+    def get_simulation_period_days(self, idf_content):
+        """Extract simulation period in days from IDF"""
+        try:
+            # Find RunPeriod object
+            run_period_pattern = r'RunPeriod[^]*?End_Month[^\d]*(\d+)[^]*?End_Day[^\d]*(\d+)'
+            match = re.search(run_period_pattern, idf_content, re.MULTILINE | re.DOTALL)
+            if match:
+                end_month = int(match.group(1))
+                end_day = int(match.group(2))
+                
+                # Also find begin month/day
+                begin_match = re.search(r'Begin_Month[^\d]*(\d+)[^]*?Begin_Day[^\d]*(\d+)', idf_content, re.MULTILINE | re.DOTALL)
+                if begin_match:
+                    begin_month = int(begin_match.group(1))
+                    begin_day = int(begin_match.group(2))
+                    
+                    # Calculate days (simple approximation)
+                    from datetime import datetime
+                    try:
+                        begin_date = datetime(2024, begin_month, begin_day)
+                        end_date = datetime(2024, end_month, end_day)
+                        # Handle year rollover
+                        if end_date < begin_date:
+                            end_date = datetime(2025, end_month, end_day)
+                        days = (end_date - begin_date).days + 1
+                        return days
+                    except:
+                        # Fallback: estimate based on months
+                        if end_month == begin_month:
+                            return end_day - begin_day + 1
+                        else:
+                            return (end_month - begin_month) * 30 + (end_day - begin_day + 1)
+        except Exception as e:
+            logger.warning(f"⚠️  Could not extract simulation period: {e}")
+        return 0
+    
     def optimize_idf_for_fast_simulation(self, idf_content):
         """Optimize IDF for fast simulation by shortening the run period"""
         try:
@@ -231,13 +267,33 @@ class RobustEnergyPlusAPI:
             disable_optimization = os.environ.get('DISABLE_IDF_OPTIMIZATION', 'false').lower() == 'true'
             optimize_for_free_tier = simulation_timeout <= 60 and not disable_optimization  # If timeout is 60s or less, optimize
             
+            # Track simulation period for validation
+            simulation_days = 365  # Default assumption (full year)
+            
             if optimize_for_free_tier:
                 logger.info("⚡ Optimizing IDF for Railway free tier (shortening simulation period)...")
                 logger.info("   (Converting full year simulations to 1 week for faster completion)")
+                # Check original period before optimization
+                original_period = self.get_simulation_period_days(idf_content)
+                if original_period > 0:
+                    simulation_days = original_period
+                    logger.info(f"   Original simulation period: {simulation_days} days")
+                
                 idf_content = self.optimize_idf_for_fast_simulation(idf_content)
+                simulation_days = 7  # After optimization, it's 1 week
                 logger.info("✅ IDF optimized for fast simulation (1 week period)")
             elif disable_optimization:
                 logger.info("⚠️  IDF optimization DISABLED (DISABLE_IDF_OPTIMIZATION=true) - running full period")
+                simulation_days = self.get_simulation_period_days(idf_content)
+                if simulation_days > 0:
+                    logger.info(f"   Simulation period: {simulation_days} days")
+            else:
+                simulation_days = self.get_simulation_period_days(idf_content)
+                if simulation_days > 0:
+                    logger.info(f"   Simulation period: {simulation_days} days")
+            
+            # Store simulation period for later validation
+            self.current_simulation_days = simulation_days
             
             # Ensure Output:SQLite is in IDF - use 'Simple' for EnergyPlus 24.2.0 compatibility
             # EnergyPlus 24.2.0 may not support SimpleAndTabular, use Simple instead
@@ -1292,45 +1348,58 @@ class RobustEnergyPlusAPI:
                     elif 'naturalgas:facility' in name_lower or 'gas:facility' in name_lower:
                         gas_kwh += value_kwh
                         total_energy += value_kwh
-                    elif 'heating' in name_lower and ('electricity' in name_lower or 'gas' in name_lower):
+                    # Improved breakdown extraction - more flexible matching for IDF Creator files
+                    # Match heating energy (various formats)
+                    elif ('heating' in name_lower or 'heat' in name_lower) and ('electricity' in name_lower or 'gas' in name_lower or 'natural' in name_lower):
                         if 'heating_energy' not in energy_data:
                             energy_data['heating_energy'] = 0
                         energy_data['heating_energy'] += value_kwh
-                        if 'gas' in name_lower:
+                        if 'gas' in name_lower or 'natural' in name_lower:
                             gas_kwh += value_kwh
                         else:
                             electricity_kwh += value_kwh
                         total_energy += value_kwh
-                    elif 'cooling:electricity' in name_lower:
+                        logger.info(f"   ✅ Heating energy: {name} = {value_kwh:.2f} kWh")
+                    # Match cooling energy
+                    elif ('cooling' in name_lower or 'cool' in name_lower) and ('electricity' in name_lower or 'energy' in name_lower):
                         if 'cooling_energy' not in energy_data:
                             energy_data['cooling_energy'] = 0
                         energy_data['cooling_energy'] += value_kwh
                         electricity_kwh += value_kwh
                         total_energy += value_kwh
-                    elif 'interiorlights:electricity' in name_lower:
+                        logger.info(f"   ✅ Cooling energy: {name} = {value_kwh:.2f} kWh")
+                    # Match lighting energy (various formats)
+                    elif ('lighting' in name_lower or 'lights' in name_lower or 'interiorlights' in name_lower) and ('electricity' in name_lower or 'energy' in name_lower):
                         if 'lighting_energy' not in energy_data:
                             energy_data['lighting_energy'] = 0
                         energy_data['lighting_energy'] += value_kwh
                         electricity_kwh += value_kwh
                         total_energy += value_kwh
-                    elif 'interiorequipment:electricity' in name_lower:
+                        logger.info(f"   ✅ Lighting energy: {name} = {value_kwh:.2f} kWh")
+                    # Match equipment energy (various formats)
+                    elif ('equipment' in name_lower or 'interiorequipment' in name_lower or 'plug' in name_lower) and ('electricity' in name_lower or 'energy' in name_lower):
                         if 'equipment_energy' not in energy_data:
                             energy_data['equipment_energy'] = 0
                         energy_data['equipment_energy'] += value_kwh
                         electricity_kwh += value_kwh
                         total_energy += value_kwh
-                    elif 'fans:electricity' in name_lower:
+                        logger.info(f"   ✅ Equipment energy: {name} = {value_kwh:.2f} kWh")
+                    # Match fans energy
+                    elif ('fan' in name_lower or 'fans' in name_lower) and ('electricity' in name_lower or 'energy' in name_lower):
                         if 'fans_energy' not in energy_data:
                             energy_data['fans_energy'] = 0
                         energy_data['fans_energy'] += value_kwh
                         electricity_kwh += value_kwh
                         total_energy += value_kwh
-                    elif 'pumps:electricity' in name_lower:
+                        logger.info(f"   ✅ Fans energy: {name} = {value_kwh:.2f} kWh")
+                    # Match pumps energy
+                    elif ('pump' in name_lower or 'pumps' in name_lower) and ('electricity' in name_lower or 'energy' in name_lower):
                         if 'pumps_energy' not in energy_data:
                             energy_data['pumps_energy'] = 0
                         energy_data['pumps_energy'] += value_kwh
                         electricity_kwh += value_kwh
                         total_energy += value_kwh
+                        logger.info(f"   ✅ Pumps energy: {name} = {value_kwh:.2f} kWh")
                 
                 if total_energy > 0:
                     energy_data['total_energy_consumption'] = round(total_energy, 2)
@@ -1423,30 +1492,37 @@ class RobustEnergyPlusAPI:
                         elif 'facility' in name_lower and ('total' in name_lower or 'site' in name_lower):
                             total_energy += value_kwh
                             logger.info(f"   ✅ Facility total: {name} = {value_kwh:.2f} kWh")
-                        elif 'heating' in name_lower:
+                        # Improved breakdown extraction for Strategy 2
+                        elif ('heating' in name_lower or 'heat' in name_lower) and 'facility' not in name_lower:
                             if 'heating_energy' not in energy_data:
                                 energy_data['heating_energy'] = 0
                             energy_data['heating_energy'] += value_kwh
-                        elif 'cooling' in name_lower:
+                            logger.info(f"   ✅ Heating (Strategy 2): {name} = {value_kwh:.2f} kWh")
+                        elif ('cooling' in name_lower or 'cool' in name_lower) and 'facility' not in name_lower:
                             if 'cooling_energy' not in energy_data:
                                 energy_data['cooling_energy'] = 0
                             energy_data['cooling_energy'] += value_kwh
-                        elif 'lighting' in name_lower:
+                            logger.info(f"   ✅ Cooling (Strategy 2): {name} = {value_kwh:.2f} kWh")
+                        elif ('lighting' in name_lower or 'lights' in name_lower or 'interiorlights' in name_lower) and 'facility' not in name_lower:
                             if 'lighting_energy' not in energy_data:
                                 energy_data['lighting_energy'] = 0
                             energy_data['lighting_energy'] += value_kwh
-                        elif 'equipment' in name_lower:
+                            logger.info(f"   ✅ Lighting (Strategy 2): {name} = {value_kwh:.2f} kWh")
+                        elif ('equipment' in name_lower or 'interiorequipment' in name_lower or 'plug' in name_lower) and 'facility' not in name_lower:
                             if 'equipment_energy' not in energy_data:
                                 energy_data['equipment_energy'] = 0
                             energy_data['equipment_energy'] += value_kwh
-                        elif 'fan' in name_lower:
+                            logger.info(f"   ✅ Equipment (Strategy 2): {name} = {value_kwh:.2f} kWh")
+                        elif ('fan' in name_lower or 'fans' in name_lower) and 'facility' not in name_lower:
                             if 'fans_energy' not in energy_data:
                                 energy_data['fans_energy'] = 0
                             energy_data['fans_energy'] += value_kwh
-                        elif 'pump' in name_lower:
+                            logger.info(f"   ✅ Fans (Strategy 2): {name} = {value_kwh:.2f} kWh")
+                        elif ('pump' in name_lower or 'pumps' in name_lower) and 'facility' not in name_lower:
                             if 'pumps_energy' not in energy_data:
                                 energy_data['pumps_energy'] = 0
                             energy_data['pumps_energy'] += value_kwh
+                            logger.info(f"   ✅ Pumps (Strategy 2): {name} = {value_kwh:.2f} kWh")
                     
                     if total_energy > 0:
                         # Validation: Check if values are reasonable
