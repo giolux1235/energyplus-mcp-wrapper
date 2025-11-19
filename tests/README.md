@@ -4,13 +4,13 @@ This directory contains all test scripts organized by category.
 
 ## Directory Structure
 
-### `/api/` - API Tests
+### `/api/` - API Tests (4 files)
 Tests for the EnergyPlus API endpoint functionality:
 - `test-energyplus-api.mjs` - Basic API connectivity and response tests
 - `test-energy-consistency.mjs` - Tests energy value consistency across runs
 - `test-idf-and-simulation.js/mjs` - Tests IDF generation and simulation workflow
 
-### `/simulation/` - Simulation Tests
+### `/simulation/` - Simulation Tests (6 files)
 Tests for EnergyPlus simulation functionality:
 - `test-simple-idf-simulation.mjs` - Simple simulation test
 - `test-multiple-idfs.mjs` - Tests multiple IDF files
@@ -19,7 +19,7 @@ Tests for EnergyPlus simulation functionality:
 - `test-simulation-limits-no-optimization.mjs` - Tests without optimization
 - `test-actual-period-limits.mjs` - Tests actual period limits
 
-### `/analysis/` - Analysis Scripts
+### `/analysis/` - Analysis Scripts (6 files)
 Scripts for analyzing simulation results:
 - `analyze-api-response.mjs` - Analyzes API response structure
 - `analyze-energy-results.mjs` - Analyzes energy simulation results
@@ -28,7 +28,7 @@ Scripts for analyzing simulation results:
 - `test-local-extraction.mjs` - Tests local energy extraction
 - `extract-and-analyze.mjs` - Extract and analyze energy data
 
-### `/comprehensive/` - Comprehensive Test Suites
+### `/comprehensive/` - Comprehensive Test Suites (7 files)
 Full test suites for comprehensive testing:
 - `comprehensive-idf-test.mjs` - Comprehensive IDF file testing
 - `comprehensive-idf-test-iterative.mjs` - Iterative IDF testing with progress tracking
@@ -37,7 +37,7 @@ Full test suites for comprehensive testing:
 - `run-multiple-tests.mjs` - Run multiple tests in sequence
 - `test-ashrae901-examples.mjs` - Tests ASHRAE 901 example files
 
-### `/weather/` - Weather File Tests
+### `/weather/` - Weather File Tests (3 files)
 Tests for weather file handling:
 - `test-weather-file-handling.mjs` - Tests weather file handling in API
 - `test-weather-matching.mjs` - Tests weather file matching logic
@@ -63,6 +63,17 @@ cd tests/weather
 node test-weather-file-handling.mjs
 ```
 
+### Run from root directory:
+All tests use `process.cwd()` for paths, so they work from any directory:
+```bash
+# From root
+node tests/api/test-energyplus-api.mjs
+
+# From tests directory
+cd tests
+node api/test-energyplus-api.mjs
+```
+
 ## Test Data
 
 Test data files are located in:
@@ -73,13 +84,14 @@ Test data files are located in:
 
 ## Test Outputs
 
-Test outputs are saved to:
+Test outputs are saved to (gitignored):
 - `../test_outputs/` - General test outputs
 - `../ashrae901_test_outputs/` - ASHRAE 901 test outputs
 - `../test_iterations_local/` - Iteration tracking data
+- `../logs/` - Log files
 
 ## Notes
 
 - Most tests require the EnergyPlus API to be running at `https://web-production-1d1be.up.railway.app/simulate`
 - Some tests require local IDF and weather files
-- Test progress is tracked in `../test_progress_local.json`
+- Test progress is tracked in `../test_progress_local.json` (gitignored)
