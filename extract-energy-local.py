@@ -199,8 +199,11 @@ class EnergyExtractor:
                     energy_data['equipment_energy'] += value_kwh
             
             if total_energy > 0:
-                energy_data['total_energy_consumption'] = round(total_energy, 2)
+                energy_data['total_energy_consumption'] = round(total_energy * 1000.0, 2)  # Watt-hours for compatibility
+                energy_data['total_energy_consumption_kwh'] = round(total_energy, 2)
+                energy_data['electricity_wh'] = round(electricity_kwh * 1000.0, 2)
                 energy_data['electricity_kwh'] = round(electricity_kwh, 2)
+                energy_data['gas_wh'] = round(gas_kwh * 1000.0, 2)
                 energy_data['gas_kwh'] = round(gas_kwh, 2)
                 logger.info(f"✅ Total energy: {total_energy:.2f} kWh")
             
@@ -273,21 +276,32 @@ class EnergyExtractor:
     def validate_and_correct(self):
         """Validate and correct energy values based on simulation period"""
         if self.simulation_days > 0 and self.energy_data.get('total_energy_consumption', 0) > 0:
-            total_energy = self.energy_data['total_energy_consumption']
+            total_energy_wh = self.energy_data['total_energy_consumption']
+            total_energy = total_energy_wh / 1000.0
             building_area = self.energy_data.get('building_area', 0)
-            
+
             if building_area > 0:
                 min_expected = (self.simulation_days / 365.0) * 100 * building_area
                 max_expected = (self.simulation_days / 365.0) * 300 * building_area
-                
+
                 if total_energy > max_expected * 10:
                     correction_factor = self.simulation_days / 365.0
                     corrected_total = total_energy * correction_factor
-                    
+
                     if corrected_total <= max_expected * 5:
                         logger.info(f"⚠️  Correcting annual total: {total_energy:.2f} → {corrected_total:.2f} kWh")
-                        self.energy_data['total_energy_consumption'] = round(corrected_total, 2)
-                        
+                        corrected_total_wh = corrected_total * 1000.0
+                        self.energy_data['total_energy_consumption'] = round(corrected_total_wh, 2)
+                        self.energy_data['total_energy_consumption_kwh'] = round(corrected_total, 2)
+                        if 'electricity_wh' in self.energy_data:
+                            self.energy_data['electricity_wh'] = round(self.energy_data['electricity_wh'] * correction_factor, 2)
+                        if 'electricity_kwh' in self.energy_data:
+                            self.energy_data['electricity_kwh'] = round(self.energy_data['electricity_kwh'] * correction_factor, 2)
+                        if 'gas_wh' in self.energy_data:
+                            self.energy_data['gas_wh'] = round(self.energy_data['gas_wh'] * correction_factor, 2)
+                        if 'gas_kwh' in self.energy_data:
+                            self.energy_data['gas_kwh'] = round(self.energy_data['gas_kwh'] * correction_factor, 2)
+
                         # Correct breakdown
                         for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy']:
                             if key in self.energy_data and self.energy_data[key] > 0:
@@ -339,13 +353,15 @@ def main():
     
     # Summary
     logger.info("\n📊 Extraction Summary:")
-    logger.info(f"   Total Energy: {extractor.energy_data.get('total_energy_consumption', 0):.2f} kWh")
+    total_energy_kwh = extractor.energy_data.get('total_energy_consumption_kwh', extractor.energy_data.get('total_energy_consumption', 0) / 1000.0)
+    logger.info(f"   Total Energy: {total_energy_kwh:.2f} kWh")
     logger.info(f"   Building Area: {extractor.energy_data.get('building_area', 0):.2f} m²")
     if extractor.energy_data.get('building_area', 0) > 0:
-        eui = extractor.energy_data.get('total_energy_consumption', 0) / extractor.energy_data.get('building_area', 1)
+        eui = total_energy_kwh / extractor.energy_data.get('building_area', 1)
         logger.info(f"   EUI: {eui:.2f} kWh/m²")
 
 
 if __name__ == '__main__':
     main()
+
 

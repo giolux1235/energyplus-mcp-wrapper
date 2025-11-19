@@ -1,0 +1,1323 @@
+{
+  "iterations": [
+    {
+      "iteration": 1,
+      "timestamp": "2025-11-17T19:54:58.827Z",
+      "git_commit": "b35b46cf489bd6bf6ff6f187ffa581f7189e3d29",
+      "git_branch": "main",
+      "total_warnings": 6,
+      "per_test_warnings": [
+        {
+          "test_number": 1,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 2,
+          "idf_name": "5ZoneAirCooled_improved.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled_improved.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 3,
+          "idf_name": "1ZoneEvapCooler.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/1ZoneEvapCooler.idf",
+          "warning_count": 6,
+          "error_count": 0,
+          "fatal": false
+        }
+      ],
+      "results": [
+        {
+          "test_number": 1,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 2,
+          "idf_name": "5ZoneAirCooled_improved.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled_improved.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 3,
+          "idf_name": "1ZoneEvapCooler.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/1ZoneEvapCooler.idf",
+          "success": true,
+          "warning_count": 6,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found",
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=81560 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "GetAirPathData: AirLoopHVAC=\"EVAP COOLER SYSTEM\" has no Controllers.",
+              "count": 1
+            },
+            {
+              "message": "Output:Meter:MeterFileOnly requested for \"Electricity:Facility\" (RunPeriod), already on \"Output:Meter\". Will report to b",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "successful_tests": 1,
+        "total_tests": 3,
+        "total_warnings": 6,
+        "total_errors": 2,
+        "fatal_errors": 2
+      }
+    },
+    {
+      "iteration": 2,
+      "timestamp": "2025-11-17T19:57:34.120Z",
+      "git_commit": "b35b46cf489bd6bf6ff6f187ffa581f7189e3d29",
+      "git_branch": "main",
+      "total_warnings": 231,
+      "per_test_warnings": [
+        {
+          "test_number": 1,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 2,
+          "idf_name": "5ZoneAirCooled_improved.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled_improved.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 3,
+          "idf_name": "1ZoneEvapCooler.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/1ZoneEvapCooler.idf",
+          "warning_count": 6,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 4,
+          "idf_name": "1ZoneUncontrolled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/1ZoneUncontrolled.idf",
+          "warning_count": 5,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 5,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/5ZoneAirCooled.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 6,
+          "idf_name": "5ZoneAirCooled_with_outputs.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/5ZoneAirCooled_with_outputs.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 7,
+          "idf_name": "AirflowNetwork_MultiZone_SmallOffice_VAV.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/AirflowNetwork_MultiZone_SmallOffice_VAV.idf",
+          "warning_count": 1,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 8,
+          "idf_name": "LgOffVAV.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/LgOffVAV.idf",
+          "warning_count": 1,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 9,
+          "idf_name": "ASHRAE901_ApartmentHighRise_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_ApartmentHighRise_STD2019_Denver.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 10,
+          "idf_name": "ASHRAE901_ApartmentMidRise_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_ApartmentMidRise_STD2019_Denver.idf",
+          "warning_count": 72,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 11,
+          "idf_name": "ASHRAE901_Hospital_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_Hospital_STD2019_Denver.idf",
+          "warning_count": 29,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 12,
+          "idf_name": "ASHRAE901_HotelLarge_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_HotelLarge_STD2019_Denver.idf",
+          "warning_count": 23,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 13,
+          "idf_name": "ASHRAE901_HotelSmall_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_HotelSmall_STD2019_Denver.idf",
+          "warning_count": 23,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 14,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver.idf",
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 15,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205.idf",
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 16,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205_Detailed.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205_Detailed.idf",
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 17,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver_ChillerEIR.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver_ChillerEIR.idf",
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 18,
+          "idf_name": "ASHRAE901_OfficeMedium_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeMedium_STD2019_Denver.idf",
+          "warning_count": 39,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 19,
+          "idf_name": "ASHRAE901_OfficeSmall_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeSmall_STD2019_Denver.idf",
+          "warning_count": 0,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 20,
+          "idf_name": "ASHRAE901_OutPatientHealthCare_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OutPatientHealthCare_STD2019_Denver.idf",
+          "warning_count": 0,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 21,
+          "idf_name": "ASHRAE901_RestaurantFastFood_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RestaurantFastFood_STD2019_Denver.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 22,
+          "idf_name": "ASHRAE901_RestaurantSitDown_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RestaurantSitDown_STD2019_Denver.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 23,
+          "idf_name": "ASHRAE901_RetailStandalone_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RetailStandalone_STD2019_Denver.idf",
+          "warning_count": 47,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 24,
+          "idf_name": "ASHRAE901_RetailStripmall_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RetailStripmall_STD2019_Denver.idf",
+          "warning_count": 71,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 25,
+          "idf_name": "ASHRAE901_SchoolPrimary_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_SchoolPrimary_STD2019_Denver.idf",
+          "warning_count": 26,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 26,
+          "idf_name": "ASHRAE901_SchoolSecondary_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_SchoolSecondary_STD2019_Denver.idf",
+          "warning_count": 7,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 27,
+          "idf_name": "ASHRAE901_Warehouse_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_Warehouse_STD2019_Denver.idf",
+          "warning_count": 25,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 28,
+          "idf_name": "1ZoneUncontrolled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/nrel_testfiles/1ZoneUncontrolled.idf",
+          "warning_count": 5,
+          "error_count": 0,
+          "fatal": false
+        },
+        {
+          "test_number": 29,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/nrel_testfiles/5ZoneAirCooled.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 30,
+          "idf_name": "RefBldgLargeOfficeNew2004_Chicago.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/nrel_testfiles/RefBldgLargeOfficeNew2004_Chicago.idf",
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true
+        },
+        {
+          "test_number": 31,
+          "idf_name": "simple_office.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/sample_files/simple_office.idf",
+          "warning_count": 0,
+          "error_count": 1,
+          "fatal": true
+        }
+      ],
+      "results": [
+        {
+          "test_number": 1,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 2,
+          "idf_name": "5ZoneAirCooled_improved.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled_improved.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 3,
+          "idf_name": "1ZoneEvapCooler.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/1ZoneEvapCooler.idf",
+          "success": true,
+          "warning_count": 6,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found",
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=81560 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "GetAirPathData: AirLoopHVAC=\"EVAP COOLER SYSTEM\" has no Controllers.",
+              "count": 1
+            },
+            {
+              "message": "Output:Meter:MeterFileOnly requested for \"Electricity:Facility\" (RunPeriod), already on \"Output:Meter\". Will report to b",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 4,
+          "idf_name": "1ZoneUncontrolled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/1ZoneUncontrolled.idf",
+          "success": true,
+          "warning_count": 5,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found",
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=81198 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 5,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/5ZoneAirCooled.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 6,
+          "idf_name": "5ZoneAirCooled_with_outputs.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/5ZoneAirCooled_with_outputs.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 7,
+          "idf_name": "AirflowNetwork_MultiZone_SmallOffice_VAV.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/AirflowNetwork_MultiZone_SmallOffice_VAV.idf",
+          "success": false,
+          "warning_count": 1,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"24.1\" not the same as expected=\"24.2\"",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 8,
+          "idf_name": "LgOffVAV.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/sample_files/LgOffVAV.idf",
+          "success": false,
+          "warning_count": 1,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.1\" not the same as expected=\"24.2\"",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 9,
+          "idf_name": "ASHRAE901_ApartmentHighRise_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_ApartmentHighRise_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "Lighting power density slightly low: 5.4 W/m² (expected 8-12 W/m²)",
+            "Equipment power density slightly low: 5.4 W/m² (expected 5-10 W/m²)"
+          ],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 10,
+          "idf_name": "ASHRAE901_ApartmentMidRise_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_ApartmentMidRise_STD2019_Denver.idf",
+          "success": true,
+          "warning_count": 72,
+          "error_count": 0,
+          "fatal": false,
+          "eui": 68.01888076828412,
+          "issues": [
+            "Lighting power density slightly low: 5.4 W/m² (expected 8-12 W/m²)",
+            "Equipment power density slightly low: 5.4 W/m² (expected 5-10 W/m²)"
+          ],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Compact=\"ZONE CONTROL TYPE SCHED\", Schedule Type Limits Name=\"CONTROL TYPE\" not found -- ",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            },
+            {
+              "message": "CheckUsedConstructions: There are 21 nominally unused constructions in input.",
+              "count": 1
+            },
+            {
+              "message": "Calculated design cooling load for zone=M N1 APARTMENT is zero.",
+              "count": 1
+            },
+            {
+              "message": "Calculated design cooling load for zone=M N2 APARTMENT is zero.",
+              "count": 1
+            },
+            {
+              "message": "Calculated design cooling load for zone=M S1 APARTMENT is zero.",
+              "count": 1
+            },
+            {
+              "message": "Calculated design cooling load for zone=M S2 APARTMENT is zero.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 11,
+          "idf_name": "ASHRAE901_Hospital_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_Hospital_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 29,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "GetDaylightingControls: Fraction of zone or space controlled by the Daylighting reference points is < 1.0.",
+              "count": 6
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_1 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not be va",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_2 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not be va",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            },
+            {
+              "message": "CalculateZoneVolume: 2 zones are not fully enclosed. For more details use:  Output:Diagnostics,DisplayExtrawarnings;",
+              "count": 1
+            },
+            {
+              "message": "CheckUsedConstructions: There are 20 nominally unused constructions in input.",
+              "count": 1
+            },
+            {
+              "message": "GetSimpleAirModelInputs: ZoneInfiltration:DesignFlowRate=\"BASEMENT_INFILTRATION\", Design Flow Rate Calculation Method sp",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 12,
+          "idf_name": "ASHRAE901_HotelLarge_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_HotelLarge_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 23,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "Lighting power density slightly low: 5.9 W/m² (expected 8-12 W/m²)"
+          ],
+          "warning_summary": [
+            {
+              "message": "ProcessScheduleInput: DecodeHHMMField, Invalid \"until\" field value is not a multiple of the minutes for each timestep: U",
+              "count": 20
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 13,
+          "idf_name": "ASHRAE901_HotelSmall_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_HotelSmall_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 23,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "ProcessScheduleInput: DecodeHHMMField, Invalid \"until\" field value is not a multiple of the minutes for each timestep: U",
+              "count": 20
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            },
+            {
+              "message": "Shading effects of Fins and Overhangs are ignored when Solar Distribution = MinimalShadowing",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 14,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_BOT WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_MID WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_TOP WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 15,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205.idf",
+          "success": false,
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_BOT WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_MID WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_TOP WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 16,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205_Detailed.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver_Chiller205_Detailed.idf",
+          "success": false,
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_BOT WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_MID WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_TOP WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 17,
+          "idf_name": "ASHRAE901_OfficeLarge_STD2019_Denver_ChillerEIR.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeLarge_STD2019_Denver_ChillerEIR.idf",
+          "success": false,
+          "warning_count": 5,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_BOT WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_MID WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_TOP WITH REHEAT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- ",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 18,
+          "idf_name": "ASHRAE901_OfficeMedium_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeMedium_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 39,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "Lighting power density slightly low: 6.9 W/m² (expected 8-12 W/m²)"
+          ],
+          "warning_summary": [
+            {
+              "message": "Since Damper Heating Action = NORMAL, input for Maximum Flow Fraction During Reheat will be ignored.",
+              "count": 15
+            },
+            {
+              "message": "GetDaylightingControls: Fraction of zone or space controlled by the Daylighting reference points is < 1.0.",
+              "count": 12
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "FixViewFactors: View factors not complete. Check for bad surface descriptions or unenclosed zone=\"MIDFLOOR_PLENUM\".",
+              "count": 2
+            },
+            {
+              "message": "FixViewFactors: View factors not complete. Check for bad surface descriptions or unenclosed zone=\"FIRSTFLOOR_PLENUM\".",
+              "count": 2
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_BOT MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not be ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_MID MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not be ",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_TOP MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not be ",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 19,
+          "idf_name": "ASHRAE901_OfficeSmall_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OfficeSmall_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 0,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "Lighting power density slightly low: 6.8 W/m² (expected 8-12 W/m²)"
+          ],
+          "warning_summary": []
+        },
+        {
+          "test_number": 20,
+          "idf_name": "ASHRAE901_OutPatientHealthCare_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_OutPatientHealthCare_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 0,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": []
+        },
+        {
+          "test_number": 21,
+          "idf_name": "ASHRAE901_RestaurantFastFood_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RestaurantFastFood_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 22,
+          "idf_name": "ASHRAE901_RestaurantSitDown_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RestaurantSitDown_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 23,
+          "idf_name": "ASHRAE901_RetailStandalone_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RetailStandalone_STD2019_Denver.idf",
+          "success": true,
+          "warning_count": 47,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC:1_UNITARY_PACKAGE_COOLCOIL but not at the AHR",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC:2_UNITARY_PACKAGE_COOLCOIL but not at the AHR",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC:3_UNITARY_PACKAGE_COOLCOIL but not at the AHR",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC:4_UNITARY_PACKAGE_COOLCOIL but not at the AHR",
+              "count": 2
+            },
+            {
+              "message": "CheckUsedConstructions: There are 23 nominally unused constructions in input.",
+              "count": 1
+            },
+            {
+              "message": "GetDaylightingControls: Fraction of zone or space controlled by the Daylighting reference points is < 1.0.",
+              "count": 1
+            },
+            {
+              "message": "Calculated design cooling load for zone=FRONT_ENTRY is zero.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 24,
+          "idf_name": "ASHRAE901_RetailStripmall_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_RetailStripmall_STD2019_Denver.idf",
+          "success": true,
+          "warning_count": 71,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "Lighting power density slightly low: 6.9 W/m² (expected 8-12 W/m²)",
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_1:1_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_2:2_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_3:3_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_4:4_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_5:5_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_6:6_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-AC_7:7_UNITARY_PACKAGE_COOLCOIL but not at the A",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 25,
+          "idf_name": "ASHRAE901_SchoolPrimary_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_SchoolPrimary_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 26,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "GetDaylightingControls: Fraction of zone or space controlled by the Daylighting reference points is < 1.0.",
+              "count": 17
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_POD_1 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_POD_2 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_POD_3 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_OTHER MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            },
+            {
+              "message": "CheckUsedConstructions: There are 23 nominally unused constructions in input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 26,
+          "idf_name": "ASHRAE901_SchoolSecondary_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_SchoolSecondary_STD2019_Denver.idf",
+          "success": false,
+          "warning_count": 7,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [],
+          "warning_summary": [
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_POD_1 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_POD_2 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_POD_3 MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "ProcessScheduleInput: Schedule:Constant=\"VAV_OTHER MAX OA FRACTION\", Blank Schedule Type Limits Name input -- will not b",
+              "count": 1
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            },
+            {
+              "message": "GetSurfaceData: Construction NONRES_EXT_WALL of interzone surface MAIN_CORRIDOR_ZN_1_FLR_1_WALL_4 does not have the same",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 27,
+          "idf_name": "ASHRAE901_Warehouse_STD2019_Denver.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/ashrae901_examples/ASHRAE901_Warehouse_STD2019_Denver.idf",
+          "success": true,
+          "warning_count": 25,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "Lighting power density slightly low: 6.0 W/m² (expected 8-12 W/m²)",
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "GetDaylightingControls: Fraction of zone or space controlled by the Daylighting reference points is < 1.0.",
+              "count": 3
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=82237 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-OFFICE COOLING COIL but not at the AHRI test con",
+              "count": 2
+            },
+            {
+              "message": "The Standard Ratings is calculated for Coil:Cooling:DX:MultiSpeed = PSZ-FINE STORAGE COOLING COIL but not at the AHRI te",
+              "count": 2
+            },
+            {
+              "message": "CheckUsedConstructions: There are 25 nominally unused constructions in input.",
+              "count": 1
+            },
+            {
+              "message": "Calculated design cooling load for zone=ZONE3 BULK STORAGE is zero.",
+              "count": 1
+            },
+            {
+              "message": "ManageSizing: For a plant sizing run, there must be at least 1 Sizing:Plant object input. SimulationControl Plant Sizing",
+              "count": 1
+            },
+            {
+              "message": "Sizing: Coil:Cooling:DX:MultiSpeed \"PSZ-OFFICE COOLING COIL\": Rated air volume flow rate per watt of rated total cooling",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 28,
+          "idf_name": "1ZoneUncontrolled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/nrel_testfiles/1ZoneUncontrolled.idf",
+          "success": true,
+          "warning_count": 5,
+          "error_count": 0,
+          "fatal": false,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found",
+            "Total energy available but floor area is zero or missing; skipping EUI calculation"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.2\" not the same as expected=\"24.2\"",
+              "count": 2
+            },
+            {
+              "message": "SetUpDesignDay: Entered DesignDay Barometric Pressure=81198 differs by more than 10% from Standard Barometric Pressure=9",
+              "count": 2
+            },
+            {
+              "message": "GetHTSurfaceData: Surfaces with interface to Ground found but no \"Ground Temperatures\" were input.",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "test_number": 29,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/nrel_testfiles/5ZoneAirCooled.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.2\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 30,
+          "idf_name": "RefBldgLargeOfficeNew2004_Chicago.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/nrel_testfiles/RefBldgLargeOfficeNew2004_Chicago.idf",
+          "success": false,
+          "warning_count": 2,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": [
+            {
+              "message": "Version: in IDF=\"25.2\" not the same as expected=\"24.2\"",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "test_number": 31,
+          "idf_name": "simple_office.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/sample_files/simple_office.idf",
+          "success": false,
+          "warning_count": 0,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found"
+          ],
+          "warning_summary": []
+        }
+      ],
+      "summary": {
+        "successful_tests": 7,
+        "total_tests": 31,
+        "total_warnings": 231,
+        "total_errors": 24,
+        "fatal_errors": 24
+      }
+    },
+    {
+      "iteration": 3,
+      "timestamp": "2025-11-17T20:02:00.775Z",
+      "git_commit": "b35b46cf489bd6bf6ff6f187ffa581f7189e3d29",
+      "git_branch": "main",
+      "total_warnings": 6,
+      "per_test_warnings": [
+        {
+          "test_number": 1,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled.idf",
+          "warning_count": 6,
+          "error_count": 1,
+          "fatal": true
+        }
+      ],
+      "results": [
+        {
+          "test_number": 1,
+          "idf_name": "5ZoneAirCooled.idf",
+          "idf_path": "/Users/giovanniamenta/energyplus test/EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/5ZoneAirCooled.idf",
+          "success": true,
+          "warning_count": 6,
+          "error_count": 1,
+          "fatal": true,
+          "issues": [
+            "No lighting power density values found",
+            "No equipment power density values found",
+            "EnergyPlus errors: 1 error(s), 6 warning(s)",
+            "First error: GetSurfaceData: Errors discovered, program terminates."
+          ],
+          "warning_summary": [
+            {
+              "message": "** Severe  ** GetSurfaceData: Potential \"OtherZoneSurface\" is not matched correctly:",
+              "count": 5
+            },
+            {
+              "message": "************* Warning:  Node connection errors not checked - most system input has not been read (see previous warning).",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "successful_tests": 1,
+        "total_tests": 1,
+        "total_warnings": 6,
+        "total_errors": 1,
+        "fatal_errors": 1
+      }
+    }
+  ],
+  "best_iteration": null
+}

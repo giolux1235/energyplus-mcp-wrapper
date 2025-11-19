@@ -111,3 +111,8 @@ validate*.py
 diagnose*.py
 fix_*.py
 debug*.py
+ashrae901_test_outputs/
+test_outputs/
+logs/
+test_iterations_local/
+test_progress*.json
