@@ -2105,7 +2105,10 @@ class RobustEnergyPlusAPI:
                 energy_intensity = annualized_total_energy / building_area
                 energy_data['energy_intensity'] = round(energy_intensity, 2)
                 energy_data['energyUseIntensity'] = round(energy_intensity, 2)  # camelCase for UI
-                energy_data['total_energy_consumption'] = round(annualized_total_energy, 2)  # Update to annualized value
+                # Update total_energy_consumption to match the annualized value used for EUI
+                # This ensures consistency between energy_intensity and total_energy_consumption
+                energy_data['total_energy_consumption'] = round(annualized_total_energy, 2)
+                logger.info(f"✅ Updated total_energy_consumption to match EUI calculation: {annualized_total_energy:.2f} kWh")
                 
                 # FIX 3: Validate EUI - detect suspiciously low values
                 if energy_intensity < 5:
