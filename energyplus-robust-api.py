@@ -660,15 +660,42 @@ class RobustEnergyPlusAPI:
             simulation_days = getattr(self, 'current_simulation_days', 365)
             if simulation_days > 0 and simulation_days < 365:
                 annualization_factor = 365.0 / simulation_days
-                logger.info(f"📅 Annualizing all energy values for response (factor: {annualization_factor:.2f}x)")
+                logger.info(f"📅 Annualizing energy values for response (factor: {annualization_factor:.2f}x, period: {simulation_days} days)")
                 
-                # Annualize total energy
-                if 'total_energy_consumption' in energy_data and energy_data['total_energy_consumption'] > 0:
-                    original = energy_data['total_energy_consumption']
-                    energy_data['total_energy_consumption'] = round(original * annualization_factor, 2)
-                    logger.info(f"   Total energy: {original:.2f} → {energy_data['total_energy_consumption']:.2f} kWh")
+                # Check if total_energy_consumption seems already annualized
+                # If it's way too high for the simulation period, it might already be annual
+                total_energy = energy_data.get('total_energy_consumption', 0)
+                building_area = energy_data.get('building_area', 0)
                 
-                # Annualize breakdown values
+                # Calculate breakdown sum to check consistency
+                breakdown_sum = sum([
+                    energy_data.get('heating_energy', 0),
+                    energy_data.get('cooling_energy', 0),
+                    energy_data.get('lighting_energy', 0),
+                    energy_data.get('equipment_energy', 0),
+                    energy_data.get('fans_energy', 0),
+                    energy_data.get('pumps_energy', 0)
+                ])
+                
+                # If breakdown sum is reasonable for weekly but total_energy is way higher,
+                # total_energy might already be annual - recalculate from breakdown
+                if breakdown_sum > 0 and building_area > 0:
+                    expected_weekly_max = (simulation_days / 365.0) * 300 * building_area
+                    if total_energy > expected_weekly_max * 10 and breakdown_sum < expected_weekly_max * 2:
+                        # total_energy seems annual, but breakdown is weekly
+                        logger.warning(f"⚠️  total_energy_consumption ({total_energy:.0f} kWh) seems already annual")
+                        logger.info(f"   Recalculating from breakdown sum ({breakdown_sum:.0f} kWh weekly)")
+                        # Use breakdown sum as base and annualize it
+                        energy_data['total_energy_consumption'] = round(breakdown_sum * annualization_factor, 2)
+                        logger.info(f"   New total_energy_consumption: {energy_data['total_energy_consumption']:.0f} kWh (annualized)")
+                    else:
+                        # Annualize total energy normally
+                        if total_energy > 0:
+                            original = total_energy
+                            energy_data['total_energy_consumption'] = round(original * annualization_factor, 2)
+                            logger.info(f"   Total energy: {original:.2f} → {energy_data['total_energy_consumption']:.2f} kWh")
+                
+                # Always annualize breakdown values (they should be weekly)
                 for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy', 'fans_energy', 'pumps_energy']:
                     if key in energy_data and energy_data[key] > 0:
                         original = energy_data[key]
