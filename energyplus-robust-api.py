@@ -707,6 +707,10 @@ class RobustEnergyPlusAPI:
                 if 'gas_kwh' in energy_data and energy_data['gas_kwh'] > 0:
                     energy_data['gas_kwh'] = round(energy_data['gas_kwh'] * annualization_factor, 2)
             
+            # Calculate additional metrics AFTER annualization
+            # This ensures EUI uses annualized energy values
+            self.add_calculated_metrics(energy_data)
+            
             # Build successful response
             response = {
                 "version": self.version,
