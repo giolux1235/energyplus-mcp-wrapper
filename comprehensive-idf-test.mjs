@@ -1,59 +1,44 @@
 #!/usr/bin/env node
 /**
- * Comprehensive IDF Creator Test - Multiple Addresses with Iteration Tracking
- * Tests IDF creator service, checks warnings, validates fixes
+ * Comprehensive Local IDF Test - Multiple IDF Files with Iteration Tracking
+ * Tests local IDF files, checks warnings, validates fixes
  * Tracks iterations and saves progress - reverts to best iteration when warnings increase
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
-import { join, basename } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
+import { join, basename, dirname } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-const IDF_CREATOR_API_URL = process.env.IDF_CREATOR_API_URL || 'https://web-production-3092c.up.railway.app';
-const ENERGYPLUS_EXE = '/usr/local/bin/energyplus';
-const ENERGYPLUS_IDD = '/usr/local/bin/Energy+.idd';
+const ENERGYPLUS_API_URL = process.env.ENERGYPLUS_API_URL || 'https://web-production-1d1be.up.railway.app/simulate';
 const VAV_MIN_FLOW_SCHEDULE_NAME = 'VAV Minimum Flow Fraction Schedule';
 const DEFAULT_VAV_DESIGN_FRACTION = 0.68;
 let dynamicVavDesignFraction = null;
 
 // Iteration tracking
-const PROGRESS_FILE = join(process.cwd(), 'test_progress.json');
-const ITERATIONS_DIR = join(process.cwd(), 'test_iterations');
-const IDF_CREATOR_DIR = process.env.IDF_CREATOR_DIR || '/Users/giovanniamenta/IDF - CREATOR 2/idf-creator';
+const PROGRESS_FILE = join(process.cwd(), 'test_progress_local.json');
+const ITERATIONS_DIR = join(process.cwd(), 'test_iterations_local');
 
 // Ensure iterations directory exists
 mkdirSync(ITERATIONS_DIR, { recursive: true });
 
-const WEATHER_FILES = [
-  'EnergyPlus-MCP/energyplus-mcp-server/sample_files/USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw',
-  'EnergyPlus-MCP/energyplus-mcp-server/illustrative examples/USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw'
+// Directories to search for IDF files
+const IDF_SEARCH_DIRS = [
+  'EnergyPlus-MCP/energyplus-mcp-server/sample_files',
+  'EnergyPlus-MCP/energyplus-mcp-server/illustrative examples',
+  'ashrae901_examples',
+  'nrel_testfiles',
+  'sample_files'
 ];
 
-const DEFAULT_TEST_ADDRESSES = [
-  '233 S Wacker Dr, Chicago, IL 60606',
-  '350 N Orleans St, Chicago, IL 60654',
-  '1 N Dearborn St, Chicago, IL 60602',
-  '875 N Michigan Ave, Chicago, IL 60611',
-  '150 N Riverside Plaza, Chicago, IL 60606'
+// Directories to search for weather files
+const WEATHER_SEARCH_DIRS = [
+  'EnergyPlus-MCP/energyplus-mcp-server/sample_files',
+  'EnergyPlus-MCP/energyplus-mcp-server/illustrative examples',
+  'ashrae901_weather'
 ];
-
-const SAN_FRANCISCO_TEST_ADDRESSES = [
-  '1 Dr Carlton B Goodlett Pl, San Francisco, CA 94102',
-  '1355 Market St, San Francisco, CA 94103',
-  '1 Ferry Building, San Francisco, CA 94111',
-  '50 Beale St, San Francisco, CA 94105',
-  '375 Beale St, San Francisco, CA 94105'
-];
-
-const WEATHER_ADDRESS_MAP = {
-  'USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw': DEFAULT_TEST_ADDRESSES,
-  'usa_il_chicago-ohare.intl.ap.725300_tmy3.epw': DEFAULT_TEST_ADDRESSES,
-  'USA_CA_San.Francisco.Intl.AP.724940_TMY3.epw': SAN_FRANCISCO_TEST_ADDRESSES,
-  'usa_ca_san.francisco.intl.ap.724940_tmy3.epw': SAN_FRANCISCO_TEST_ADDRESSES
-};
 
 // Progress tracking functions
 function loadProgress() {
@@ -75,32 +60,122 @@ function saveProgress(progress) {
 
 async function getCurrentGitCommit() {
   try {
-    const { stdout } = await execAsync('git rev-parse HEAD', { cwd: IDF_CREATOR_DIR });
+    const { stdout } = await execAsync('git rev-parse HEAD', { cwd: process.cwd() });
     return stdout.trim();
   } catch (error) {
-    return 'unknown';
+    return 'local-files';
   }
 }
 
 async function getCurrentGitBranch() {
   try {
-    const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: IDF_CREATOR_DIR });
+    const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: process.cwd() });
     return stdout.trim();
   } catch (error) {
-    return 'unknown';
+    return 'local-files';
   }
 }
 
+// Find all IDF files in search directories
+function findLocalIDFFiles() {
+  const idfFiles = [];
+  for (const dir of IDF_SEARCH_DIRS) {
+    const fullPath = join(process.cwd(), dir);
+    if (!existsSync(fullPath)) {
+      continue;
+    }
+    try {
+      const files = readdirSync(fullPath);
+      for (const file of files) {
+        if (file.toLowerCase().endsWith('.idf')) {
+          const filePath = join(fullPath, file);
+          try {
+            const stats = statSync(filePath);
+            if (stats.isFile()) {
+              idfFiles.push(filePath);
+            }
+          } catch (e) {
+            // Skip if can't stat
+          }
+        }
+      }
+    } catch (error) {
+      // Skip directory if can't read
+      continue;
+    }
+  }
+  return idfFiles.sort();
+}
+
+// Find all weather files in search directories
+function findLocalWeatherFiles() {
+  const weatherFiles = [];
+  for (const dir of WEATHER_SEARCH_DIRS) {
+    const fullPath = join(process.cwd(), dir);
+    if (!existsSync(fullPath)) {
+      continue;
+    }
+    try {
+      const files = readdirSync(fullPath);
+      for (const file of files) {
+        if (file.toLowerCase().endsWith('.epw')) {
+          const filePath = join(fullPath, file);
+          try {
+            const stats = statSync(filePath);
+            if (stats.isFile()) {
+              weatherFiles.push(filePath);
+            }
+          } catch (e) {
+            // Skip if can't stat
+          }
+        }
+      }
+    } catch (error) {
+      // Skip directory if can't read
+      continue;
+    }
+  }
+  return weatherFiles.sort();
+}
+
+// Match IDF file with appropriate weather file
+function matchWeatherFile(idfPath) {
+  const idfName = basename(idfPath).toLowerCase();
+  const weatherFiles = findLocalWeatherFiles();
+  
+  // Try to match by location name in filename (check most specific first)
+  if (idfName.includes('san.francisco') || idfName.includes('sanfrancisco') || idfName.includes('sf')) {
+    const sfWeather = weatherFiles.find(w => w.toLowerCase().includes('san.francisco') || w.toLowerCase().includes('sanfrancisco'));
+    if (sfWeather) return sfWeather;
+  }
+  if (idfName.includes('denver') || idfName.includes('golden')) {
+    const denverWeather = weatherFiles.find(w => w.toLowerCase().includes('denver') || w.toLowerCase().includes('golden'));
+    if (denverWeather) return denverWeather;
+  }
+  if (idfName.includes('chicago')) {
+    const chicagoWeather = weatherFiles.find(w => w.toLowerCase().includes('chicago'));
+    if (chicagoWeather) return chicagoWeather;
+  }
+  
+  // Default to first available weather file
+  return weatherFiles[0] || null;
+}
+
 function calculateTotalWarnings(results) {
+  // Only count warnings from successful tests - failed tests don't count for optimization
   return results.reduce((total, result) => {
-    return total + (result.warnings?.length || 0);
+    if (result.success) {
+      return total + (result.warnings?.length || 0);
+    }
+    return total;
   }, 0);
 }
 
 function calculatePerTestWarnings(results) {
   return results.map(result => ({
     test_number: result.test_number,
-    address: result.address,
+    idf_name: result.idf_name,
+    idf_path: result.idf_path,
     warning_count: result.warnings?.length || 0,
     error_count: result.errors?.length || 0,
     fatal: result.fatal || false
@@ -117,7 +192,8 @@ function saveIteration(iterationNumber, results, gitCommit, gitBranch) {
     per_test_warnings: calculatePerTestWarnings(results),
     results: results.map(r => ({
       test_number: r.test_number,
-      address: r.address,
+      idf_name: r.idf_name,
+      idf_path: r.idf_path,
       success: r.success,
       warning_count: r.warnings?.length || 0,
       error_count: r.errors?.length || 0,
@@ -221,29 +297,28 @@ function postProcessIdf(idfContent, weatherContent) {
   return updatedContent;
 }
 
-function findWeatherFile() {
-  for (const filePath of WEATHER_FILES) {
-    try {
-      const fullPath = join(process.cwd(), filePath);
-      readFileSync(fullPath, 'utf-8');
-      return filePath;
-    } catch (error) {
-      continue;
-    }
-  }
-  throw new Error('No weather file found');
-}
-
 function readWeatherFile(filePath) {
-  const fullPath = join(process.cwd(), filePath);
-  return readFileSync(fullPath, 'utf-8');
+  // filePath can be absolute or relative
+  if (!existsSync(filePath)) {
+    const fullPath = join(process.cwd(), filePath);
+    if (existsSync(fullPath)) {
+      return readFileSync(fullPath, 'utf-8');
+    }
+    throw new Error(`Weather file not found: ${filePath}`);
+  }
+  return readFileSync(filePath, 'utf-8');
 }
 
-function determineTestAddresses(weatherFilePath) {
-  const base = basename(weatherFilePath || '').trim();
-  const lookup = WEATHER_ADDRESS_MAP[base] || WEATHER_ADDRESS_MAP[base.toLowerCase()];
-  const addresses = Array.isArray(lookup) && lookup.length ? lookup : DEFAULT_TEST_ADDRESSES;
-  return addresses.slice(0, 5);
+function readLocalIDF(idfPath) {
+  // idfPath can be absolute or relative
+  if (!existsSync(idfPath)) {
+    const fullPath = join(process.cwd(), idfPath);
+    if (existsSync(fullPath)) {
+      return readFileSync(fullPath, 'utf-8');
+    }
+    throw new Error(`IDF file not found: ${idfPath}`);
+  }
+  return readFileSync(idfPath, 'utf-8');
 }
 
 function parseValueFromLine(line) {
@@ -1175,122 +1250,131 @@ function summarizeMessages(messages, limit = 5, sliceLength = 80) {
     .map(([message, count]) => ({ message, count }));
 }
 
-async function generateIDF(address, buildingType = 'office', floorArea = 5000, numFloors = 5) {
-  console.log(`\n📤 Generating IDF for: ${address}`);
+function loadLocalIDF(idfPath) {
+  console.log(`\n📤 Loading IDF from: ${idfPath}`);
   
-  const response = await fetch(`${IDF_CREATOR_API_URL}/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      address: address,
-      building_type: buildingType
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`IDF Creator API returned ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (!data.success) {
-    throw new Error('IDF Creator did not return success');
-  }
-
-  let idfContent;
-  if (data.download_url) {
-    const downloadUrl = `${IDF_CREATOR_API_URL}${data.download_url}`;
-    const idfResponse = await fetch(downloadUrl);
-    if (!idfResponse.ok) {
-      throw new Error(`Failed to download IDF: ${idfResponse.status}`);
-    }
-    idfContent = await idfResponse.text();
-  } else if (data.idf_content) {
-    idfContent = data.idf_content;
-  } else {
-    throw new Error('No IDF content or download URL');
-  }
-
-  idfContent = sanitizeIdfContent(idfContent);
+  const idfContent = readLocalIDF(idfPath);
+  const sanitizedContent = sanitizeIdfContent(idfContent);
 
   return {
-    idf_content: idfContent,
-    parameters: data.parameters_used || data.parameters || {}
+    idf_content: sanitizedContent,
+    parameters: { source: 'local_file', path: idfPath }
   };
 }
 
 async function runSimulation(idfContent, weatherContent, outputDir) {
   mkdirSync(outputDir, { recursive: true });
   
-  const idfPath = join(outputDir, 'input.idf');
-  const weatherPath = join(outputDir, 'weather.epw');
-  
-  writeFileSync(idfPath, idfContent, 'utf-8');
-  writeFileSync(weatherPath, weatherContent, 'utf-8');
-  
   // Ensure Output:SQLite
   if (!idfContent.includes('Output:SQLite')) {
-    const updatedIdf = idfContent + "\n\nOutput:SQLite,\n    Simple;\n";
-    writeFileSync(idfPath, updatedIdf, 'utf-8');
-    idfContent = updatedIdf;
+    idfContent = idfContent + "\n\nOutput:SQLite,\n    Simple;\n";
   }
   
-  const originalCwd = process.cwd();
-  process.chdir(outputDir);
-  
-  const cmd = [
-    ENERGYPLUS_EXE,
-    '-w', 'weather.epw',
-    '-d', '.',
-    '-i', ENERGYPLUS_IDD,
-    'input.idf'
-  ].join(' ');
+  const requestBody = {
+    idf_content: idfContent,
+    weather_content: weatherContent
+  };
   
   const startTime = Date.now();
-  let stdout, stderr;
   
   try {
-    const result = await execAsync(cmd, {
-      timeout: 600000,
-      maxBuffer: 10 * 1024 * 1024
+    console.log(`   📤 Calling EnergyPlus API: ${ENERGYPLUS_API_URL}`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minute timeout
+    
+    const response = await fetch(ENERGYPLUS_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
     });
-    stdout = result.stdout;
-    stderr = result.stderr;
-  } finally {
-    process.chdir(originalCwd);
+    
+    clearTimeout(timeoutId);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`EnergyPlus API error (${response.status}): ${errorText}`);
+    }
+    
+    const apiResults = await response.json();
+    
+    // Save API response for reference
+    writeFileSync(join(outputDir, 'api_response.json'), JSON.stringify(apiResults, null, 2), 'utf-8');
+    
+    // Download error file if available for warning analysis
+    if (apiResults.output_files_download && apiResults.output_files_download['eplusout.err']) {
+      try {
+        const downloadBaseUrl = apiResults.download_base_url || ENERGYPLUS_API_URL.replace('/simulate', '');
+        const errUrl = `${downloadBaseUrl}${apiResults.output_files_download['eplusout.err'].url}`;
+        const errResponse = await fetch(errUrl);
+        if (errResponse.ok) {
+          const errContent = await errResponse.text();
+          writeFileSync(join(outputDir, 'eplusout.err'), errContent, 'utf-8');
+        }
+      } catch (e) {
+        console.warn(`   ⚠️  Could not download error file: ${e.message}`);
+      }
+    }
+    
+    return {
+      success: apiResults.simulation_status === 'success',
+      output_dir: outputDir,
+      elapsed_time: elapsed,
+      api_response: apiResults,
+      stdout: apiResults.stdout || '',
+      stderr: apiResults.stderr || ''
+    };
+    
+  } catch (error) {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    if (error.name === 'AbortError') {
+      throw new Error('Simulation request timed out after 10 minutes');
+    }
+    throw error;
   }
-  
-  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  
-  return {
-    success: true,
-    output_dir: outputDir,
-    elapsed_time: elapsed,
-    stdout,
-    stderr
-  };
 }
 
-function analyzeWarnings(outputDir) {
-  const errFile = join(outputDir, 'eplusout.err');
-  if (!existsSync(errFile)) {
-    return { warnings: [], errors: [], fatal: false };
-  }
-  
-  const content = readFileSync(errFile, 'utf-8');
-  const lines = content.split('\n');
-  
+function analyzeWarnings(outputDir, apiResponse = null) {
   const warnings = [];
   const errors = [];
   let fatal = false;
   
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.includes('** Warning **')) {
-      warnings.push(line.replace('** Warning **', '').trim());
-    } else if (line.includes('** Severe **') || line.includes('**  Fatal  **')) {
-      errors.push(line.replace(/\*\*.*?\*\*/g, '').trim());
-      if (line.includes('Fatal')) {
+  // First, try to get warnings/errors from API response
+  if (apiResponse) {
+    if (apiResponse.warnings && Array.isArray(apiResponse.warnings)) {
+      warnings.push(...apiResponse.warnings);
+    }
+    if (apiResponse.errors && Array.isArray(apiResponse.errors)) {
+      errors.push(...apiResponse.errors);
+      if (apiResponse.simulation_status === 'error' || apiResponse.fatal_error) {
         fatal = true;
+      }
+    }
+  }
+  
+  // Also check error file if it exists (downloaded from API)
+  const errFile = join(outputDir, 'eplusout.err');
+  if (existsSync(errFile)) {
+    const content = readFileSync(errFile, 'utf-8');
+    const lines = content.split('\n');
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.includes('** Warning **')) {
+        const warning = line.replace('** Warning **', '').trim();
+        if (!warnings.includes(warning)) {
+          warnings.push(warning);
+        }
+      } else if (line.includes('** Severe **') || line.includes('**  Fatal  **')) {
+        const error = line.replace(/\*\*.*?\*\*/g, '').trim();
+        if (!errors.includes(error)) {
+          errors.push(error);
+        }
+        if (line.includes('Fatal')) {
+          fatal = true;
+        }
       }
     }
   }
@@ -1408,7 +1492,25 @@ function analyzeIDF(idfContent) {
   return { issues, info };
 }
 
-async function extractEnergyData(outputDir) {
+async function extractEnergyData(outputDir, apiResponse = null) {
+  // First, try to get energy data from API response
+  if (apiResponse && apiResponse.simulation_status === 'success') {
+    if (apiResponse.energy_results || apiResponse.total_energy_consumption) {
+      return {
+        energy_data: {
+          total_energy_consumption: apiResponse.total_energy_consumption || 0,
+          energy_intensity: apiResponse.energy_intensity || 0,
+          building_area: apiResponse.building_area || 0,
+          heating_energy: apiResponse.energy_results?.heating_energy || 0,
+          cooling_energy: apiResponse.energy_results?.cooling_energy || 0,
+          lighting_energy: apiResponse.energy_results?.lighting_energy || 0,
+          equipment_energy: apiResponse.energy_results?.equipment_energy || 0
+        }
+      };
+    }
+  }
+  
+  // Fallback to local extraction if API doesn't have data
   const extractScript = join(process.cwd(), 'extract-energy-local.py');
   const files = readdirSync(outputDir);
   const sqliteFile = files.find(f => f.endsWith('.sql') || f.endsWith('.sqlite'));
@@ -1422,16 +1524,19 @@ async function extractEnergyData(outputDir) {
       return { error: error.message };
     }
   }
-  return { error: 'No SQLite file or extraction script' };
+  return { error: 'No energy data available from API or local extraction' };
 }
 
-async function runTest(address, testNumber, weatherFile) {
+async function runTest(idfPath, testNumber, weatherFile) {
+  const idfName = basename(idfPath);
   console.log(`\n${'='.repeat(70)}`);
-  console.log(`TEST ${testNumber}: ${address}`);
+  console.log(`TEST ${testNumber}: ${idfName}`);
+  console.log(`IDF Path: ${idfPath}`);
   console.log('='.repeat(70));
   
   const results = {
-    address,
+    idf_path: idfPath,
+    idf_name: idfName,
     test_number: testNumber,
     success: false,
     issues: [],
@@ -1451,10 +1556,10 @@ async function runTest(address, testNumber, weatherFile) {
     }
     const weatherContent = readWeatherFile(weatherFile);
 
-    // Generate IDF
+    // Load IDF from local file
     dynamicVavDesignFraction = null;
 
-    const idfResult = await generateIDF(address, 'office', 5000, 5);
+    const idfResult = loadLocalIDF(idfPath);
     results.idf_size = (idfResult.idf_content.length / 1024).toFixed(1);
 
     const baseProcessedIdf = postProcessIdf(idfResult.idf_content, weatherContent);
@@ -1482,7 +1587,7 @@ async function runTest(address, testNumber, weatherFile) {
         simError = error;
       }
 
-      const warnings = analyzeWarnings(attemptOutputDir);
+      const warnings = analyzeWarnings(attemptOutputDir, simResult?.api_response);
       const eioPath = join(attemptOutputDir, 'eplusout.eio');
       const requiredFraction = computeRequiredVavDesignFractionFromEio(eioPath);
       const currentFraction = dynamicVavDesignFraction ?? DEFAULT_VAV_DESIGN_FRACTION;
@@ -1496,6 +1601,7 @@ async function runTest(address, testNumber, weatherFile) {
 
       finalOutputDir = attemptOutputDir;
       finalWarnings = warnings;
+      finalSimResult = simResult;
 
       if (simError) {
         results.output_dir = finalOutputDir;
@@ -1507,7 +1613,6 @@ async function runTest(address, testNumber, weatherFile) {
         throw simError;
       }
 
-      finalSimResult = simResult;
       break;
     }
 
@@ -1534,8 +1639,8 @@ async function runTest(address, testNumber, weatherFile) {
       }
     }
     
-    // Extract energy data
-    const energyData = await extractEnergyData(finalOutputDir);
+    // Extract energy data from API response
+    const energyData = await extractEnergyData(finalOutputDir, finalSimResult?.api_response);
     results.energy_data = energyData;
     
     if (energyData.energy_data) {
@@ -1569,7 +1674,17 @@ async function runTest(address, testNumber, weatherFile) {
     
     // Even if simulation failed, try to analyze what we have
     if (results.output_dir && existsSync(results.output_dir)) {
-      const warnings = analyzeWarnings(results.output_dir);
+      // Try to load API response if available
+      const apiResponsePath = join(results.output_dir, 'api_response.json');
+      let apiResponse = null;
+      if (existsSync(apiResponsePath)) {
+        try {
+          apiResponse = JSON.parse(readFileSync(apiResponsePath, 'utf-8'));
+        } catch (e) {
+          // Ignore
+        }
+      }
+      const warnings = analyzeWarnings(results.output_dir, apiResponse);
       results.warnings = warnings.warnings;
       results.errors = warnings.errors;
       results.fatal = warnings.fatal;
@@ -1587,10 +1702,35 @@ async function runTest(address, testNumber, weatherFile) {
 }
 
 async function main() {
-  console.log('🧪 Comprehensive IDF Creator Test Suite - Iterative Optimization');
+  console.log('🧪 Comprehensive Local IDF Test Suite - Using Railway API');
   console.log('='.repeat(70));
-  console.log('Tracks iterations and optimizes towards 0 warnings');
+  console.log('Tests local IDF files using Railway EnergyPlus API (v25.1.0)');
+  console.log('Checks warnings, validates fixes, tracks iterations');
   console.log('='.repeat(70));
+  console.log(`🌐 EnergyPlus API: ${ENERGYPLUS_API_URL}`);
+
+  // Find all local IDF files
+  const idfFiles = findLocalIDFFiles();
+  if (idfFiles.length === 0) {
+    console.error('❌ No IDF files found in search directories:');
+    IDF_SEARCH_DIRS.forEach(dir => console.error(`   - ${dir}`));
+    process.exit(1);
+  }
+
+  // Find all weather files
+  const weatherFiles = findLocalWeatherFiles();
+  if (weatherFiles.length === 0) {
+    console.error('❌ No weather files found in search directories:');
+    WEATHER_SEARCH_DIRS.forEach(dir => console.error(`   - ${dir}`));
+    process.exit(1);
+  }
+
+  console.log(`\n📁 Found ${idfFiles.length} IDF file(s)`);
+  console.log(`🌤️  Found ${weatherFiles.length} weather file(s)`);
+
+  // Limit number of tests if TEST_COUNT is set
+  const testCount = parseInt(process.env.TEST_COUNT || idfFiles.length.toString(), 10);
+  const testIDFFiles = idfFiles.slice(0, testCount);
 
   // Load progress
   const progress = loadProgress();
@@ -1618,25 +1758,20 @@ async function main() {
   console.log(`\n🔄 Starting Iteration ${iterationNumber}`);
   console.log(`📌 Current Git Commit: ${gitCommit.substring(0, 8)}`);
   console.log(`📌 Current Git Branch: ${gitBranch}`);
-  
-  // Check if we should warn about reverting
-  const bestIteration = findBestIteration(progress);
-  if (bestIteration && iterationNumber > 1) {
-    console.log(`\n💡 Tip: If this iteration has more warnings than ${bestIteration.total_warnings},`);
-    console.log(`   consider reverting with: git checkout ${bestIteration.git_commit.substring(0, 8)}`);
-  }
-
-  const weatherFile = findWeatherFile();
-  const testAddresses = determineTestAddresses(weatherFile);
-
-  console.log(`\nUsing weather file: ${weatherFile}`);
-  console.log(`Testing ${testAddresses.length} different addresses`);
-  console.log(`IDF Creator URL: ${IDF_CREATOR_API_URL}`);
+  console.log(`\nTesting ${testIDFFiles.length} IDF file(s)`);
   
   const allResults = [];
   
-  for (let i = 0; i < testAddresses.length; i++) {
-    const result = await runTest(testAddresses[i], i + 1, weatherFile);
+  for (let i = 0; i < testIDFFiles.length; i++) {
+    const idfPath = testIDFFiles[i];
+    const weatherFile = matchWeatherFile(idfPath);
+    
+    if (!weatherFile) {
+      console.warn(`⚠️  No weather file matched for ${basename(idfPath)}, skipping...`);
+      continue;
+    }
+    
+    const result = await runTest(idfPath, i + 1, weatherFile);
     allResults.push(result);
     
     // Display quick summary
@@ -1665,7 +1800,7 @@ async function main() {
     }
     
     // Brief pause between tests
-    if (i < testAddresses.length - 1) {
+    if (i < testIDFFiles.length - 1) {
       console.log('\n⏸️  Waiting 3 seconds before next test...');
       await new Promise(resolve => setTimeout(resolve, 3000));
     }
@@ -1811,7 +1946,8 @@ async function main() {
   console.log('\n🔁 Per-Test Issue Breakdown:');
   console.log('-'.repeat(70));
   allResults.forEach(result => {
-    console.log(`Test ${result.test_number}: ${result.address}`);
+    console.log(`Test ${result.test_number}: ${result.idf_name}`);
+    console.log(`   IDF Path: ${result.idf_path}`);
     console.log(`   Success: ${result.success ? 'Yes' : 'No'}`);
     console.log(`   Weather: ${result.weather_file || 'N/A'}`);
     console.log(`   Elapsed: ${result.elapsed_time || 'n/a'} s`);
@@ -1842,16 +1978,16 @@ async function main() {
   // Detailed results table
   console.log('\n📊 Detailed Results:');
   console.log('-'.repeat(70));
-  console.log('Address'.padEnd(35) + 'Area'.padEnd(8) + 'Light'.padEnd(8) + 'Equip'.padEnd(8) + 'EUI'.padEnd(10) + 'Issues');
+  console.log('IDF File'.padEnd(35) + 'Area'.padEnd(8) + 'Light'.padEnd(8) + 'Equip'.padEnd(8) + 'EUI'.padEnd(10) + 'Issues');
   console.log('-'.repeat(70));
   successful.forEach(r => {
-    const addr = r.address.substring(0, 33);
+    const idfName = r.idf_name.substring(0, 33);
     const area = (r.idf_analysis?.info?.total_area || 0).toFixed(0);
     const light = (r.idf_analysis?.info?.avg_lighting_power || 0).toFixed(1);
     const equip = (r.idf_analysis?.info?.avg_equipment_power || 0).toFixed(1);
     const eui = (r.eui || 0).toFixed(2);
     const issues = r.issues.length;
-    console.log(`${addr.padEnd(35)}${area.padEnd(8)}${light.padEnd(8)}${equip.padEnd(8)}${eui.padEnd(10)}${issues}`);
+    console.log(`${idfName.padEnd(35)}${area.padEnd(8)}${light.padEnd(8)}${equip.padEnd(8)}${eui.padEnd(10)}${issues}`);
   });
   
   // Iteration history summary
@@ -1875,16 +2011,16 @@ async function main() {
   if (warningsIncreased && currentBest) {
     console.log(`\n💡 RECOMMENDATION:`);
     console.log(`   Warnings increased from ${currentBest.total_warnings} to ${totalWarnings}`);
-    console.log(`   To revert to best iteration:`);
-    console.log(`   1. cd "${IDF_CREATOR_DIR}"`);
-    console.log(`   2. git checkout ${currentBest.git_commit.substring(0, 8)}`);
-    console.log(`   3. Re-run tests to continue optimization from best point`);
+    console.log(`   Previous best iteration had fewer warnings.`);
   } else if (isNewBest) {
     console.log(`\n✅ This iteration is the new best! Continue optimizing from here.`);
   }
   
   console.log('\n' + '='.repeat(70));
 }
+
+// Export functions for use in iterative test
+export { runTest, findLocalIDFFiles, findLocalWeatherFiles, matchWeatherFile, calculateTotalWarnings };
 
 main().catch(console.error);
 

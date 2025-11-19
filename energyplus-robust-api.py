@@ -417,17 +417,19 @@ class RobustEnergyPlusAPI:
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Write IDF file
                 idf_path = os.path.join(temp_dir, 'input.idf')
-                with open(idf_path, 'w') as f:
+                with open(idf_path, 'w', encoding='utf-8') as f:
                     f.write(idf_content)
                 logger.info(f"📄 IDF file written: {idf_path}")
                 
                 # Write weather file if provided
                 weather_path = None
-                if weather_content:
+                if weather_content and weather_content.strip():
                     weather_path = os.path.join(temp_dir, 'weather.epw')
-                    with open(weather_path, 'w') as f:
+                    with open(weather_path, 'w', encoding='utf-8') as f:
                         f.write(weather_content)
-                    logger.info(f"🌤️ Weather file written: {weather_path}")
+                    logger.info(f"🌤️ Weather file written: {weather_path} ({len(weather_content)} bytes)")
+                elif weather_content:
+                    logger.warning("⚠️  Weather content provided but is empty/whitespace-only, skipping weather file")
                 
                 # Create output directory
                 output_dir = os.path.join(temp_dir, 'output')
@@ -2484,6 +2486,15 @@ class RobustEnergyPlusAPI:
             if not idf_content:
                 self.send_error_response(client_socket, "Missing idf_content")
                 return
+            
+            # Validate weather content (check for empty/whitespace-only)
+            if weather_content and not weather_content.strip():
+                logger.warning("⚠️  Weather content is whitespace-only, treating as empty")
+                weather_content = ''
+            
+            # Check for extremely large weather files (warn if > 10 MB)
+            if weather_content and len(weather_content) > 10 * 1024 * 1024:
+                logger.warning(f"⚠️  Large weather file: {len(weather_content) / 1024 / 1024:.1f} MB (may cause memory issues)")
             
             logger.info(f"📊 IDF content: {len(idf_content)} bytes")
             logger.info(f"📊 Weather content: {len(weather_content)} bytes")
