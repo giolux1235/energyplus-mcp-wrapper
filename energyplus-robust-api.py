@@ -655,6 +655,31 @@ class RobustEnergyPlusAPI:
             # Calculate additional metrics
             self.add_calculated_metrics(energy_data)
             
+            # Annualize energy values if simulation period is less than 365 days
+            # This ensures EUI and total energy are reported as annual values
+            simulation_days = getattr(self, 'current_simulation_days', 365)
+            if simulation_days > 0 and simulation_days < 365:
+                annualization_factor = 365.0 / simulation_days
+                logger.info(f"📅 Annualizing all energy values for response (factor: {annualization_factor:.2f}x)")
+                
+                # Annualize total energy
+                if 'total_energy_consumption' in energy_data and energy_data['total_energy_consumption'] > 0:
+                    original = energy_data['total_energy_consumption']
+                    energy_data['total_energy_consumption'] = round(original * annualization_factor, 2)
+                    logger.info(f"   Total energy: {original:.2f} → {energy_data['total_energy_consumption']:.2f} kWh")
+                
+                # Annualize breakdown values
+                for key in ['heating_energy', 'cooling_energy', 'lighting_energy', 'equipment_energy', 'fans_energy', 'pumps_energy']:
+                    if key in energy_data and energy_data[key] > 0:
+                        original = energy_data[key]
+                        energy_data[key] = round(original * annualization_factor, 2)
+                
+                # Annualize electricity and gas if present
+                if 'electricity_kwh' in energy_data and energy_data['electricity_kwh'] > 0:
+                    energy_data['electricity_kwh'] = round(energy_data['electricity_kwh'] * annualization_factor, 2)
+                if 'gas_kwh' in energy_data and energy_data['gas_kwh'] > 0:
+                    energy_data['gas_kwh'] = round(energy_data['gas_kwh'] * annualization_factor, 2)
+            
             # Build successful response
             response = {
                 "version": self.version,
@@ -670,6 +695,7 @@ class RobustEnergyPlusAPI:
             }
             
             # Add energy_results field when extraction succeeds
+            # Note: energy_data values are already annualized at this point
             if energy_data.get('total_energy_consumption', 0) > 0:
                 extraction_method = energy_data.pop('_extraction_method', 'standard')  # Remove internal tracking
                 
@@ -682,28 +708,25 @@ class RobustEnergyPlusAPI:
                 
                 building_area = energy_data.get('building_area', 0)
                 
-                # Calculate EUI if we have both values
+                # Calculate EUI (energy_data is already annualized)
                 eui = 0
                 if total_site_energy > 0 and building_area > 0:
                     eui = total_site_energy / building_area
                 
                 # Build energy_results in the exact format required
+                # Values are already annualized
                 response['energy_results'] = {
                     "total_site_energy_kwh": round(total_site_energy, 2),
                     "building_area_m2": round(building_area, 2),
-                    "eui_kwh_m2": round(eui, 2)
-                }
-                
-                # Also include detailed breakdown for backward compatibility
-                response['energy_results'].update({
-                    "heating_energy": energy_data.get('heating_energy', 0),
-                    "cooling_energy": energy_data.get('cooling_energy', 0),
-                    "lighting_energy": energy_data.get('lighting_energy', 0),
-                    "equipment_energy": energy_data.get('equipment_energy', 0),
-                    "fans_energy": energy_data.get('fans_energy', 0),
-                    "pumps_energy": energy_data.get('pumps_energy', 0),
+                    "eui_kwh_m2": round(eui, 2),
+                    "heating_energy": round(energy_data.get('heating_energy', 0), 2),
+                    "cooling_energy": round(energy_data.get('cooling_energy', 0), 2),
+                    "lighting_energy": round(energy_data.get('lighting_energy', 0), 2),
+                    "equipment_energy": round(energy_data.get('equipment_energy', 0), 2),
+                    "fans_energy": round(energy_data.get('fans_energy', 0), 2),
+                    "pumps_energy": round(energy_data.get('pumps_energy', 0), 2),
                     "extraction_method": extraction_method
-                })
+                }
                 
                 logger.info(f"✅ Added energy_results to response (method: {extraction_method})")
                 logger.info(f"   Total site energy: {total_site_energy:.2f} kWh")
@@ -2042,10 +2065,20 @@ class RobustEnergyPlusAPI:
                 logger.warning("⚠️  Expected range: 50-50000 m²")
             
             # Calculate energy intensity (kWh/m²)
-            if total_energy > 0 and building_area > 0:
-                energy_intensity = total_energy / building_area
+            # IMPORTANT: Annualize energy if simulation period is less than 365 days
+            simulation_days = getattr(self, 'current_simulation_days', 365)
+            annualized_total_energy = total_energy
+            if simulation_days > 0 and simulation_days < 365:
+                # Annualize weekly/monthly energy values
+                annualization_factor = 365.0 / simulation_days
+                annualized_total_energy = total_energy * annualization_factor
+                logger.info(f"📅 Annualizing total energy for EUI: {total_energy:.2f} kWh ({simulation_days} days) → {annualized_total_energy:.2f} kWh (annual)")
+            
+            if annualized_total_energy > 0 and building_area > 0:
+                energy_intensity = annualized_total_energy / building_area
                 energy_data['energy_intensity'] = round(energy_intensity, 2)
                 energy_data['energyUseIntensity'] = round(energy_intensity, 2)  # camelCase for UI
+                energy_data['total_energy_consumption'] = round(annualized_total_energy, 2)  # Update to annualized value
                 
                 # FIX 3: Validate EUI - detect suspiciously low values
                 if energy_intensity < 5:
