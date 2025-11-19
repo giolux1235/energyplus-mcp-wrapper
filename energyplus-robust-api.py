@@ -2096,23 +2096,13 @@ class RobustEnergyPlusAPI:
                 logger.warning("⚠️  Expected range: 50-50000 m²")
             
             # Calculate energy intensity (kWh/m²)
-            # IMPORTANT: Annualize energy if simulation period is less than 365 days
-            simulation_days = getattr(self, 'current_simulation_days', 365)
-            annualized_total_energy = total_energy
-            if simulation_days > 0 and simulation_days < 365:
-                # Annualize weekly/monthly energy values
-                annualization_factor = 365.0 / simulation_days
-                annualized_total_energy = total_energy * annualization_factor
-                logger.info(f"📅 Annualizing total energy for EUI: {total_energy:.2f} kWh ({simulation_days} days) → {annualized_total_energy:.2f} kWh (annual)")
-            
-            if annualized_total_energy > 0 and building_area > 0:
-                energy_intensity = annualized_total_energy / building_area
+            # Note: energy values should already be annualized by this point (done before add_calculated_metrics)
+            # So we use total_energy directly without additional annualization
+            if total_energy > 0 and building_area > 0:
+                energy_intensity = total_energy / building_area
                 energy_data['energy_intensity'] = round(energy_intensity, 2)
                 energy_data['energyUseIntensity'] = round(energy_intensity, 2)  # camelCase for UI
-                # Update total_energy_consumption to match the annualized value used for EUI
-                # This ensures consistency between energy_intensity and total_energy_consumption
-                energy_data['total_energy_consumption'] = round(annualized_total_energy, 2)
-                logger.info(f"✅ Updated total_energy_consumption to match EUI calculation: {annualized_total_energy:.2f} kWh")
+                logger.info(f"✅ Calculated EUI: {energy_intensity:.2f} kWh/m²/year from {total_energy:.2f} kWh / {building_area:.2f} m²")
                 
                 # FIX 3: Validate EUI - detect suspiciously low values
                 if energy_intensity < 5:
